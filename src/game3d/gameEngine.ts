@@ -710,7 +710,7 @@ export class GameEngine {
     this.alliedJets.push({
       group: jetGroup,
       velocity: new THREE.Vector3(0, -0.6, -120),
-      bombsLeft: 10,
+      bombsLeft: 14,
       // 3s delay before bombs start dropping (per blueprint)
       lastBombTime: performance.now() + 3000,
     });
@@ -2193,6 +2193,10 @@ export class GameEngine {
               hit = true;
               if (p.type === 'player_drone') {
                 this.detonateDrone(p);
+              } else if (p.type === 'player_cannon' && p.splashRadius >= 8) {
+                // Heavy cannon shells & airstrike bombs detonate on the ground
+                // with real area damage (this is what made air support "miss").
+                this.detonateAoe(p);
               } else {
                 this.createExplosion(p.position.x, ground + 0.2, p.position.z, 'small');
               }
@@ -2313,18 +2317,22 @@ export class GameEngine {
     this.floaters.push({ sprite, life: 0, maxLife: 1.2 });
   }
 
-  // Kamikaze drone detonation: big explosion + area damage to all enemies in range.
-  private detonateDrone(p: ProjectileEntity) {
-    const px = p.position.x, py = p.position.y, pz = p.position.z;
-    this.createExplosion(px, py, pz, 'large');
-    // area damage
+  // Area-damage detonation (airstrike bombs, cannon splash). Deals damage to
+  // every enemy within splashRadius of the impact point + triggers the boom.
+  private detonateAoe(p: ProjectileEntity) {
+    this.createExplosion(p.position.x, p.position.y, p.position.z, 'large');
     for (const e of this.enemies) {
       if (e.dead) continue;
-      const d = Math.hypot(e.position.x - px, e.position.y - py, e.position.z - pz);
+      const d = Math.hypot(e.position.x - p.position.x, e.position.y - p.position.y, e.position.z - p.position.z);
       if (d <= p.splashRadius) {
         this.damageEnemy(e, p.damage, { x: e.position.x, y: e.position.y, z: e.position.z }, 'none');
       }
     }
+  }
+
+  // Kamikaze drone detonation: big explosion + area damage to all enemies in range.
+  private detonateDrone(p: ProjectileEntity) {
+    this.detonateAoe(p);
   }
 
   private updateFloaters(dt: number) {    for (let i = this.floaters.length - 1; i >= 0; i--) {
@@ -2636,8 +2644,8 @@ export class GameEngine {
           mesh: bombMesh,
           position: { x: bombPos.x, y: bombPos.y, z: bombPos.z },
           velocity: { x: (Math.random() - 0.5) * 4, y: -42, z: jet.velocity.z * 0.4 },
-          damage: 260,
-          splashRadius: 18.0,
+          damage: 360,
+          splashRadius: 26.0,
           lifetime: 0,
           maxLifetime: 2.5,
         });
