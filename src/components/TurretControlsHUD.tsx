@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Volume2, VolumeX, ZoomIn, Plane } from 'lucide-react';
 import { GameStats, RadarBlip, WeaponState, WeaponType } from '../types';
+import { RadarHUD } from './RadarHUD';
 
 interface TurretControlsHUDProps {
   stats: GameStats;
@@ -42,6 +43,8 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
   isNight,
   autoFire,
   zoomLevel,
+  radarBlips,
+  headingDeg,
   onSwitchWeapon,
   onReload,
   onToggleZoom,
@@ -148,8 +151,8 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
         </div>
       )}
 
-      {/* ---- Top-left: compact score + night flare ---- */}
-      <div className="flex items-start justify-between w-full">
+      {/* ---- Top row: score (left) · 360 radar/compass (centre) · buttons (right) ---- */}
+      <div className="flex items-start justify-between w-full gap-2">
         <div className="flex flex-col gap-1.5">
           <div className="bg-black/60 backdrop-blur-[2px] border border-zinc-700/50 rounded px-2.5 py-1 text-right pointer-events-auto">
             <div className="text-[9px] font-mono text-zinc-500 tracking-[0.2em]">SCORE</div>
@@ -160,6 +163,11 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
               ⚠ {Math.round(hpPercent)}%
             </div>
           )}
+        </div>
+
+        {/* Centre: 360° compass + enemy radar in one */}
+        <div className="flex flex-col items-center scale-75 sm:scale-100 origin-top">
+          <RadarHUD blips={radarBlips} headingDeg={headingDeg} />
         </div>
 
         {/* Top-right: minimal action buttons */}

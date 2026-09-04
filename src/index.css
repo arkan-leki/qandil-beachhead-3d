@@ -14,3 +14,7 @@
   60% { transform: rotate(90deg); }
   100% { transform: rotate(90deg); }
 }
+@keyframes radarPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
