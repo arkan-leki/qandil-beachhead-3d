@@ -248,14 +248,6 @@ export class MobileControls {
       );
       return;
     }
-
-    if (touches.length === 1) {
-      // Long-press = open settings
-      this.longPressTimer = window.setTimeout(() => {
-        this.gestureLocked = true;
-        this.cb.onSettingsOpen && this.cb.onSettingsOpen();
-      }, 600);
-    }
   }
 
   private onTouchMove(e: TouchEvent) {
@@ -273,14 +265,13 @@ export class MobileControls {
       }
       return;
     }
-    // If a second finger was added but this is the drag, allow engine drag-aim (no-op here)
+    // Single-finger drag = aim (handled by the engine's drag-to-aim); this
+    // module deliberately does NOT interpret swipes so aiming never triggers
+    // accidental weapon switches or settings.
   }
 
   private onTouchEnd(e: TouchEvent) {
-    if (this.longPressTimer) {
-      clearTimeout(this.longPressTimer);
-      this.longPressTimer = null;
-    }
+    if (this.longPressTimer) { clearTimeout(this.longPressTimer); this.longPressTimer = null; }
     if (this.gestureLocked) return;
 
     const now = performance.now();
@@ -298,7 +289,8 @@ export class MobileControls {
       return;
     }
 
-    // Single touch gesture resolution
+    // Single touch: a quick, stationary tap = fire. Drags (which move >12px)
+    // are aiming and are ignored here so they never switch weapons.
     const p0 = touches[0];
     const end = e.changedTouches[0];
     if (!end) return;
@@ -306,8 +298,8 @@ export class MobileControls {
     const dy = end.clientY - p0.y;
     const dist = Math.hypot(dx, dy);
 
-    if (dist < 12 && dt < 300) {
-      // TAP = fire (single shot); double-tap = airstrike
+    if (dist < 14 && dt < 300) {
+      // TAP = fire; double-tap = airstrike
       if (now - this.lastTapTime < 320) {
         this.cb.onAirstrike();
         this.lastTapTime = 0;
@@ -316,14 +308,6 @@ export class MobileControls {
         this.cb.onFireEnd();
         this.lastTapTime = now;
       }
-    } else if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50) {
-      // Horizontal swipe = weapon switch
-      this.cb.onSwitchWeapon(dx < 0 ? 1 : -1);
-      this.vibrate(20);
-    } else if (Math.abs(dy) > 60 && dy < 0) {
-      // Swipe up = reload
-      this.cb.onReload();
-      this.vibrate(20);
     }
   }
 
