@@ -33,7 +33,7 @@ export const DEFAULT_MOBILE_SETTINGS: MobileSettings = {
   haptics: true,
 };
 
-const SETTINGS_KEY = 'beachhead-mobile-settings-v1';
+const SETTINGS_KEY = 'beachhead-mobile-settings-v2'; // v2: forces old 'hybrid' storage to reset to touch
 
 export function loadMobileSettings(): MobileSettings {
   try {
@@ -101,10 +101,9 @@ export class MobileControls {
 
   public init() {
     if (!this.isTouchDevice) return;
-    // Gyro is only attached when the user explicitly picks a gyro scheme
-    if (this.settings.controlScheme !== 'touch') {
-      this.setupGyroscope();
-    }
+    // Gyro is only attached when the user explicitly picks a gyro scheme.
+    // Default is touch, so no sensor is wired unless chosen.
+    this.setGyroEnabled(this.settings.controlScheme !== 'touch');
     this.setupTouch();
     this.attached = true;
   }
@@ -116,10 +115,8 @@ export class MobileControls {
   public setSettings(s: Partial<MobileSettings>) {
     this.settings = { ...this.settings, ...s };
     saveMobileSettings(this.settings);
-    // Attach gyro the moment the user enables a gyro scheme
-    if (this.settings.controlScheme !== 'touch' && !this.gyroAvailable) {
-      this.setupGyroscope();
-    }
+    // Enabling a gyro scheme → attach the sensor; disabling → remove it (stops looping).
+    this.setGyroEnabled(this.settings.controlScheme !== 'touch');
   }
 
   public get usesGyro(): boolean {
@@ -136,43 +133,55 @@ export class MobileControls {
   }
 
   /* ---------------- Gyroscope ---------------- */
-  private setupGyroscope() {
-    const handler = (e: DeviceOrientationEvent) => {
-      if (e.beta === null || e.gamma === null) return;
-      this.onOrientation(e.beta, e.gamma, e.alpha || 0);
-    };
+  private gyroHandler: ((e: DeviceOrientationEvent) => void) | null = null;
+  private _gyroEnabled = false;
 
-    // iOS 13+ requires permission
-    const doa = DeviceOrientationEvent as unknown as {
-      requestPermission?: () => Promise<string>;
-    };
-    if (typeof doa.requestPermission === 'function') {
-      // Permission must be requested from a user gesture. We expose a method
-      // that the App calls on the first tap (see requestGyroPermission).
-      (this as unknown as { _gyroHandler: typeof handler })._gyroHandler = handler;
-      this.gyroAvailable = true;
-    } else {
-      window.addEventListener('deviceorientation', handler);
+  // Turn gyro on/off. When off, the deviceorientation listener is fully removed
+  // so no sensor data ever reaches the camera (no more endless spinning).
+  public setGyroEnabled(enabled: boolean) {
+    this._gyroEnabled = enabled;
+    if (!enabled) {
+      if (this.gyroHandler) window.removeEventListener('deviceorientation', this.gyroHandler);
+      return;
+    }
+    // iOS: permission requires a user gesture; we only wire the listener after
+    // grant (handled in requestGyroPermission). Non-iOS can attach directly.
+    const doa = DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> };
+    if (typeof doa.requestPermission !== 'function') {
+      if (!this.gyroHandler) {
+        this.gyroHandler = (e: DeviceOrientationEvent) => {
+          if (e.beta === null || e.gamma === null) return;
+          this.onOrientation(e.beta, e.gamma, e.alpha || 0);
+        };
+      }
+      window.addEventListener('deviceorientation', this.gyroHandler);
       this.gyroAvailable = true;
       this.gyroGranted = true;
+    } else {
+      this.gyroAvailable = true;
     }
   }
 
   public async requestGyroPermission(): Promise<boolean> {
+    if (!this._gyroEnabled) return false;
     const doa = DeviceOrientationEvent as unknown as {
       requestPermission?: () => Promise<string>;
     };
     if (typeof doa.requestPermission !== 'function') {
-      this.gyroGranted = true;
+      this.setGyroEnabled(true);
       return true;
     }
     try {
       const state = await doa.requestPermission();
       this.gyroGranted = state === 'granted';
       if (this.gyroGranted) {
-        const handler = (this as unknown as { _gyroHandler?: (e: DeviceOrientationEvent) => void })._gyroHandler;
-        if (handler) window.addEventListener('deviceorientation', handler);
-        // capture current orientation as neutral after a short delay
+        if (!this.gyroHandler) {
+          this.gyroHandler = (e: DeviceOrientationEvent) => {
+            if (e.beta === null || e.gamma === null) return;
+            this.onOrientation(e.beta, e.gamma, e.alpha || 0);
+          };
+        }
+        if (this._gyroEnabled) window.addEventListener('deviceorientation', this.gyroHandler);
         setTimeout(() => this.calibrate(), 300);
       }
       return this.gyroGranted;
@@ -227,8 +236,8 @@ export class MobileControls {
     this.touchStartTime = performance.now();
     this.gestureLocked = false;
 
-    // Request gyro permission on first user gesture (iOS)
-    if (this.gyroAvailable && !this.gyroGranted) {
+    // Only request gyro permission if the user actually enabled a gyro scheme
+    if (this._gyroEnabled && this.gyroAvailable && !this.gyroGranted) {
       this.requestGyroPermission();
     }
 
