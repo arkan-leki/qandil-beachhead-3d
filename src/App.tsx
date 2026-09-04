@@ -200,9 +200,9 @@ export default function App() {
       setIsNight(night);
     };
 
-    engine.onMobileSettingsChange = () => {
-      setSettingsOpen(true);
-    };
+    // NOTE: settings modal only opens via the explicit ⚙️ button. We intentionally
+    // do NOT wire onMobileSettingsChange to open it, so no touch input can pop it.
+    engine.onMobileSettingsChange = () => {};
 
     return () => {
       engine.cleanup();

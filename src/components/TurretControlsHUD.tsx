@@ -289,13 +289,13 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
           </div>
         </div>
 
-        {/* Fire button */}
+        {/* Fire button (pointer events avoid double-firing from touch+mouse) */}
         <div className="pointer-events-auto flex flex-col items-end gap-1">
           <button
-            onMouseDown={onFireStart}
-            onMouseUp={onFireEnd}
-            onTouchStart={onFireStart}
-            onTouchEnd={onFireEnd}
+            onPointerDown={onFireStart}
+            onPointerUp={onFireEnd}
+            onPointerLeave={onFireEnd}
+            onPointerCancel={onFireEnd}
             className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-linear-to-b from-red-600 to-red-800 border-4 border-amber-500/80 shadow-2xl flex flex-col items-center justify-center text-white active:scale-95 transition-transform"
           >
             <span className="text-lg leading-none mb-0.5">🔥</span>
