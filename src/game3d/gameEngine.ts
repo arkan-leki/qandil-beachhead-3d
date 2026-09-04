@@ -505,17 +505,22 @@ export class GameEngine {
       }
     });
 
-    // Touch support for mobile / tablet
+    // Touch support for mobile / tablet.
+    // SPLIT-ZONE CONTROLS: the LEFT side of the screen aims the camera;
+    // the RIGHT side changes gun. Only aim for touches that start on the left.
     el.addEventListener('touchstart', (e) => {
       if (e.touches.length > 0) {
-        this.isDragging = true;
-        this.lastPointerX = e.touches[0].clientX;
-        this.lastPointerY = e.touches[0].clientY;
+        const t = e.touches[0];
+        if (t.clientX < window.innerWidth * 0.55) {
+          this.isDragging = true;
+          this.lastPointerX = t.clientX;
+          this.lastPointerY = t.clientY;
+        }
       }
     }, { passive: true });
 
     el.addEventListener('touchmove', (e) => {
-      if (this.isDragging && e.touches.length > 0) {
+      if (this.isDragging && e.touches.length > 0 && e.touches[0].clientX < window.innerWidth * 0.6) {
         const dx = e.touches[0].clientX - this.lastPointerX;
         const dy = e.touches[0].clientY - this.lastPointerY;
         this.lastPointerX = e.touches[0].clientX;

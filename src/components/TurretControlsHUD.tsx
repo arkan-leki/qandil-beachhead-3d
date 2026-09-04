@@ -54,6 +54,8 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
   const hpPercent = (stats.baseHealth / stats.maxBaseHealth) * 100;
   const isCritical = hpPercent <= 25;
   const airstrikesAvailable = stats.airstrikesAvailable ?? 0;
+  // Whether the device is touch-capable (to show split-zone hints only on mobile)
+  const [isTouch] = useState(() => 'ontouchstart' in window || navigator.maxTouchPoints > 0);
 
   // Wave banner: briefly announce the wave, then hide (no permanent header)
   const [banner, setBanner] = useState<{ wave: number; night: boolean; key: number } | null>(null);
@@ -122,6 +124,14 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
         paddingRight: 'max(0.75rem, env(safe-area-inset-right))',
       }}
     >
+      {/* ---- Split-zone hints (touch only): LEFT = aim, RIGHT = gun ---- */}
+      {isTouch && (
+        <div className="absolute inset-x-0 bottom-40 sm:bottom-44 flex justify-between px-3 pointer-events-none">
+          <div className="font-mono text-[9px] sm:text-[10px] text-emerald-300/70 bg-black/40 px-2 py-0.5 rounded tracking-widest">◀ DRAG = AIM</div>
+          <div className="font-mono text-[9px] sm:text-[10px] text-amber-300/70 bg-black/40 px-2 py-0.5 rounded tracking-widest">TAP = GUN ▶</div>
+        </div>
+      )}
+
       {/* ---- Wave banner (transient) ---- */}
       {banner && (
         <div key={banner.key} className="absolute top-[16%] inset-x-0 flex justify-center pointer-events-none">

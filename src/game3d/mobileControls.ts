@@ -88,6 +88,8 @@ export class MobileControls {
   private longPressTimer: number | null = null;
   private gestureLocked = false;
   private lastTapTime = 0;
+  private rightZoneTaps = 0;   // consecutive quick taps on the right (gun) zone
+  private lastRightTap = 0;
 
   constructor(el: HTMLElement, cb: MobileCallbacks) {
     this.settings = loadMobileSettings();
@@ -265,9 +267,8 @@ export class MobileControls {
       }
       return;
     }
-    // Single-finger drag = aim (handled by the engine's drag-to-aim); this
-    // module deliberately does NOT interpret swipes so aiming never triggers
-    // accidental weapon switches or settings.
+    // Single-finger drag on the LEFT is handled by the engine as aim.
+    // Nothing here interprets swipes, so aiming never changes guns/settings.
   }
 
   private onTouchEnd(e: TouchEvent) {
@@ -289,8 +290,6 @@ export class MobileControls {
       return;
     }
 
-    // Single touch: a quick, stationary tap = fire. Drags (which move >12px)
-    // are aiming and are ignored here so they never switch weapons.
     const p0 = touches[0];
     const end = e.changedTouches[0];
     if (!end) return;
@@ -298,16 +297,25 @@ export class MobileControls {
     const dy = end.clientY - p0.y;
     const dist = Math.hypot(dx, dy);
 
-    if (dist < 14 && dt < 300) {
-      // TAP = fire; double-tap = airstrike
-      if (now - this.lastTapTime < 320) {
-        this.cb.onAirstrike();
-        this.lastTapTime = 0;
-      } else {
-        this.cb.onFireStart();
-        this.cb.onFireEnd();
-        this.lastTapTime = now;
+    // Split zones: LEFT = aim (drag) + tap = fire, RIGHT = change gun.
+    const isRightZone = p0.x >= window.innerWidth * 0.55;
+    if (isRightZone) {
+      // quick stationary tap on the RIGHT cycles to the next weapon
+      if (dist < 14 && dt < 300) {
+        if (now - this.lastRightTap < 340) {
+          this.cb.onSwitchWeapon(1);
+          this.rightZoneTaps = 0;
+        } else {
+          this.rightZoneTaps++;
+          this.cb.onSwitchWeapon(1);
+        }
+        this.lastRightTap = now;
+        this.vibrate(20);
       }
+    } else if (dist < 14 && dt < 300) {
+      // quick stationary tap on the LEFT fires the current gun
+      this.cb.onFireStart();
+      this.cb.onFireEnd();
     }
   }
 
