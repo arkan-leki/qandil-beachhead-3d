@@ -25,6 +25,8 @@ interface TurretControlsHUDProps {
   onSettings?: () => void;
   onFullscreen?: () => void;
   isFullscreen?: boolean;
+  kamikazeReady?: boolean;
+  onKamikaze?: () => void;
 }
 
 const WEAPON_LIST: { type: WeaponType; key: string; short: string; icon: string }[] = [
@@ -56,6 +58,8 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
   onSettings,
   onFullscreen,
   isFullscreen,
+  kamikazeReady,
+  onKamikaze,
 }) => {
   const activeW = weapons[currentWeapon];
   const hpPercent = (stats.baseHealth / stats.maxBaseHealth) * 100;
@@ -197,6 +201,16 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
               title={`Airstrike (B) — ${airstrikesAvailable} left`}
             >
               <Plane className="w-4 h-4" />
+            </button>
+            <button
+              onClick={onKamikaze}
+              disabled={!kamikazeReady}
+              className={`w-9 h-9 rounded flex items-center justify-center border text-xs ${
+                kamikazeReady ? 'bg-orange-950/80 border-orange-500/80 text-orange-300 animate-pulse' : 'bg-zinc-900/60 border-zinc-800 text-zinc-600'
+              }`}
+              title="Shaheen Kamikaze Drone (ready every 60s)"
+            >
+              🚁
             </button>
             {isNight && (
               <button

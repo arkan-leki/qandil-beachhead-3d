@@ -1261,6 +1261,61 @@ export function createEnemyJetModel(): { group: THREE.Group } {
 }
 
 /**
+ * Shaheen kamikaze drone: a small fixed-wing loitering munition that homes
+ * onto a target and detonates on impact.
+ */
+export function createShaheenDroneModel(): { group: THREE.Group } {
+  const group = new THREE.Group();
+  group.name = 'shaheen_drone';
+  group.scale.set(1.1, 1.1, 1.1);
+
+  // Fuselage (compact body)
+  const bodyGeo = new THREE.CylinderGeometry(0.22, 0.28, 2.4, 10);
+  bodyGeo.rotateX(Math.PI / 2);
+  const body = new THREE.Mesh(bodyGeo, materials.darkSteel);
+  group.add(body);
+
+  // Nose cone (warhead tip)
+  const noseGeo = new THREE.ConeGeometry(0.22, 0.6, 10);
+  noseGeo.rotateX(Math.PI / 2);
+  const nose = new THREE.Mesh(noseGeo, materials.lensRed);
+  nose.position.set(0, 0, 1.5);
+  group.add(nose);
+
+  // Delta wings
+  const wingGeo = new THREE.BoxGeometry(3.0, 0.08, 0.8);
+  const wings = new THREE.Mesh(wingGeo, materials.tankGreen);
+  wings.position.set(0, 0.1, 0.6);
+  group.add(wings);
+
+  // Tail fins (V-tail)
+  const finGeo = new THREE.BoxGeometry(0.55, 0.02, 0.8);
+  const finL = new THREE.Mesh(finGeo, materials.darkSteel);
+  finL.position.set(-0.35, 0.4, -1.1);
+  finL.rotation.z = 0.4;
+  group.add(finL);
+  const finR = new THREE.Mesh(finGeo, materials.darkSteel);
+  finR.position.set(0.35, 0.4, -1.1);
+  finR.rotation.z = -0.4;
+  group.add(finR);
+
+  // Rear pusher prop (small)
+  const propGeo = new THREE.BoxGeometry(0.05, 1.3, 0.05);
+  const prop = new THREE.Mesh(propGeo, materials.darkSteel);
+  prop.position.set(0, 0, -1.35);
+  group.add(prop);
+
+  // Warhead casing stripe (orange)
+  const stripeGeo = new THREE.CylinderGeometry(0.29, 0.29, 0.3, 10);
+  stripeGeo.rotateX(Math.PI / 2);
+  const stripe = new THREE.Mesh(stripeGeo, materials.jetFlame);
+  stripe.position.set(0, 0, 0.5);
+  group.add(stripe);
+
+  return { group };
+}
+
+/**
  * Cargo transport plane: high-wing troop carrier that drops paratroopers.
  */
 export function createTransportPlaneModel(): { group: THREE.Group } {

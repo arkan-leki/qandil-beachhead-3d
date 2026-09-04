@@ -27,6 +27,7 @@ export default function App() {
     baseHealth: 100,
     maxBaseHealth: 100,
     airstrikesAvailable: 2,
+    kamikazeCooldown: 0,
     currentEchelon: 1,
     totalEchelons: 3,
     activeThreats: 0,
@@ -252,6 +253,7 @@ export default function App() {
         shotsHit: 0,
         baseHealth: 100,
         maxBaseHealth: 100,
+        kamikazeCooldown: 0,
         airstrikesAvailable: 2,
         currentEchelon: 1,
         totalEchelons: 3,
@@ -350,6 +352,11 @@ export default function App() {
     if (engineRef.current) engineRef.current.fireFlare();
   };
 
+  const handleKamikaze = () => {
+    soundManager.init();
+    if (engineRef.current) engineRef.current.triggerKamikaze();
+  };
+
   return (
     <div className="relative w-full h-screen overflow-hidden bg-black select-none font-mono">
       {/* 3D Canvas Viewport */}
@@ -393,6 +400,8 @@ export default function App() {
         onSettings={() => setSettingsOpen(true)}
         onFullscreen={handleFullscreen}
         isFullscreen={isFullscreen}
+        kamikazeReady={(stats.kamikazeCooldown ?? 0) <= 0}
+        onKamikaze={handleKamikaze}
       />
 
       {/* Overlays: Start Briefing, Wave Clear, Game Over */}

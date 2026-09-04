@@ -25,6 +25,7 @@ import {
   createJetModel,
   createMountainTerrain,
   createParatrooperModel,
+  createShaheenDroneModel,
   createSoldierModel,
   createTankModel,
   createTransportPlaneModel,
@@ -302,6 +303,7 @@ export class GameEngine {
     totalWaveEnemies: 0,
     remainingWaveEnemies: 0,
     airstrikesAvailable: 2,
+    kamikazeCooldown: 0, // 0 = ready; otherwise ms remaining
     currentEchelon: 1,
     totalEchelons: 3,
     activeThreats: 0,
@@ -698,7 +700,6 @@ export class GameEngine {
 
     this.stats.airstrikesAvailable--;
     soundManager.playJetFlyby();
-
     // B-58 heavy bomber: slower, longer run, delayed carpet-bombing
     const { group: jetGroup } = createJetModel();
     jetGroup.scale.set(2.0, 2.0, 2.0);
@@ -717,6 +718,49 @@ export class GameEngine {
     if (this.onStatsUpdate) {
       this.onStatsUpdate(this.stats);
     }
+  }
+
+  // Shaheen kamikaze drone: guided, detonates on the target under the crosshair.
+  // One use per 60s cooldown.
+  private static readonly KAMIKAZE_COOLDOWN_MS = 60000;
+  public get kamikazeReady(): boolean {
+    return this.stats.kamikazeCooldown <= 0;
+  }
+  public triggerKamikaze() {
+    if (!this.kamikazeReady || this.gameState !== 'playing') return;
+
+    // Target the enemy under (or nearest to) the crosshair
+    const dir = new THREE.Vector3(
+      -Math.sin(this.yaw) * Math.cos(this.pitch),
+      Math.sin(this.pitch),
+      -Math.cos(this.yaw) * Math.cos(this.pitch)
+    ).normalize();
+    const target = this.findTargetInCrosshair(dir);
+
+    // Launch origin above/before the bunker, on the aim line
+    const fireOrigin = new THREE.Vector3().copy(this.camera.position).addScaledVector(dir, 2.5);
+    const { group } = createShaheenDroneModel();
+    group.position.copy(fireOrigin);
+    group.lookAt(fireOrigin.x + dir.x * 20, fireOrigin.y + dir.y * 20, fireOrigin.z + dir.z * 20);
+    this.scene.add(group);
+
+    this.projectiles.push({
+      id: this.nextEntityId++,
+      type: 'player_drone',
+      mesh: group,
+      position: { x: fireOrigin.x, y: fireOrigin.y, z: fireOrigin.z },
+      velocity: { x: dir.x * 30, y: dir.y * 30, z: dir.z * 30 },
+      damage: 2200,
+      splashRadius: 18.0,
+      lifetime: 0,
+      maxLifetime: 12,
+      targetId: target?.id,
+    });
+
+    soundManager.playMissileLaunch();
+    this.stats.kamikazeCooldown = GameEngine.KAMIKAZE_COOLDOWN_MS;
+
+    if (this.onStatsUpdate) this.onStatsUpdate(this.stats);
   }
 
   public reloadWeapon(type: WeaponType) {
@@ -2048,20 +2092,21 @@ export class GameEngine {
       const p = this.projectiles[i];
       p.lifetime += dt;
 
-      // Homing missile logic
-      if (p.type === 'player_missile' && p.targetId) {
+      // Homing logic (missiles + kamikaze drone steer to target)
+      if ((p.type === 'player_missile' || p.type === 'player_drone') && p.targetId) {
         const target = this.enemies.find((e) => e.id === p.targetId && !e.dead);
         if (target) {
           const toTarget = new THREE.Vector3(target.position.x - p.position.x, target.position.y - p.position.y, target.position.z - p.position.z).normalize();
-          p.velocity.x = THREE.MathUtils.lerp(p.velocity.x, toTarget.x * 110, dt * 4);
-          p.velocity.y = THREE.MathUtils.lerp(p.velocity.y, toTarget.y * 110, dt * 4);
-          p.velocity.z = THREE.MathUtils.lerp(p.velocity.z, toTarget.z * 110, dt * 4);
+          const speed = p.type === 'player_drone' ? 60 : 110;
+          p.velocity.x = THREE.MathUtils.lerp(p.velocity.x, toTarget.x * speed, dt * 4);
+          p.velocity.y = THREE.MathUtils.lerp(p.velocity.y, toTarget.y * speed, dt * 4);
+          p.velocity.z = THREE.MathUtils.lerp(p.velocity.z, toTarget.z * speed, dt * 4);
           p.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), toTarget);
         }
       }
 
-      // Rocket smoke trail
-      if (p.type === 'player_missile' || p.type === 'enemy_rocket') {
+      // Smoke trail (missiles + drone)
+      if (p.type === 'player_missile' || p.type === 'enemy_rocket' || p.type === 'player_drone') {
         this.particles.push({
           x: p.position.x,
           y: p.position.y,
@@ -2075,6 +2120,13 @@ export class GameEngine {
           maxLife: 0.6,
           smoke: true,
         });
+        // Drone leaves a hot exhaust glow too
+        if (p.type === 'player_drone') {
+          this.particles.push({
+            x: p.position.x, y: p.position.y, z: p.position.z,
+            vx: 0, vy: 0, vz: 0, color: '#ff9a2e', size: 1.6, life: 0, maxLife: 0.18,
+          });
+        }
       }
 
       // Sub-stepped movement: fast player rounds (220 m/s) move ~3.7m per frame,
@@ -2102,6 +2154,11 @@ export class GameEngine {
             if (dist <= e.hitRadius + p.splashRadius * 0.5) {
               hit = true;
               this.stats.shotsHit++;
+              if (p.type === 'player_drone') {
+                // Drone detonates: kill the target + splash everything nearby
+                this.detonateDrone(p);
+                break;
+              }
               const crit = this.computeCrit(e, p.position);
               this.damageEnemy(e, p.damage * (crit === 'head' ? 1.5 : crit === 'rotor' ? 3.0 : crit === 'treads' ? 1.2 : 1.0), p.position, crit);
               break;
@@ -2134,7 +2191,11 @@ export class GameEngine {
             const ground = this.getHeightAt(p.position.x, p.position.z);
             if (p.position.y <= ground) {
               hit = true;
-              this.createExplosion(p.position.x, ground + 0.2, p.position.z, 'small');
+              if (p.type === 'player_drone') {
+                this.detonateDrone(p);
+              } else {
+                this.createExplosion(p.position.x, ground + 0.2, p.position.z, 'small');
+              }
             }
           }
 
@@ -2146,6 +2207,11 @@ export class GameEngine {
             this.damagePlayerBase(p.damage);
           }
         }
+      }
+
+      if (p.type === 'player_drone' && !hit && p.lifetime >= p.maxLifetime) {
+        this.detonateDrone(p);
+        hit = true;
       }
 
       if (hit || p.lifetime >= p.maxLifetime) {
@@ -2247,8 +2313,21 @@ export class GameEngine {
     this.floaters.push({ sprite, life: 0, maxLife: 1.2 });
   }
 
-  private updateFloaters(dt: number) {
-    for (let i = this.floaters.length - 1; i >= 0; i--) {
+  // Kamikaze drone detonation: big explosion + area damage to all enemies in range.
+  private detonateDrone(p: ProjectileEntity) {
+    const px = p.position.x, py = p.position.y, pz = p.position.z;
+    this.createExplosion(px, py, pz, 'large');
+    // area damage
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      const d = Math.hypot(e.position.x - px, e.position.y - py, e.position.z - pz);
+      if (d <= p.splashRadius) {
+        this.damageEnemy(e, p.damage, { x: e.position.x, y: e.position.y, z: e.position.z }, 'none');
+      }
+    }
+  }
+
+  private updateFloaters(dt: number) {    for (let i = this.floaters.length - 1; i >= 0; i--) {
       const f = this.floaters[i];
       f.life += dt;
       f.sprite.position.y += dt * 2.2;
@@ -2491,6 +2570,11 @@ export class GameEngine {
           if (w.heat <= 0.35) w.overheated = false;
         }
       }
+    }
+
+    // Kamikaze drone cooldown ticks down
+    if (this.stats.kamikazeCooldown > 0) {
+      this.stats.kamikazeCooldown = Math.max(0, this.stats.kamikazeCooldown - dt * 1000);
     }
 
     // Barrel recoil recovery — the whole ZU unit kicks back on its side

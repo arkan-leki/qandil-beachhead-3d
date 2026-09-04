@@ -88,7 +88,7 @@ export interface EnemyEntity {
 
 export interface ProjectileEntity {
   id: number;
-  type: 'player_bullet' | 'player_cannon' | 'player_missile' | 'enemy_bullet' | 'enemy_shell' | 'enemy_rocket';
+  type: 'player_bullet' | 'player_cannon' | 'player_missile' | 'player_drone' | 'enemy_bullet' | 'enemy_shell' | 'enemy_rocket';
   mesh: any;
   position: { x: number; y: number; z: number };
   velocity: { x: number; y: number; z: number };
@@ -157,6 +157,7 @@ export interface GameStats {
   totalWaveEnemies: number;
   remainingWaveEnemies: number;
   airstrikesAvailable: number;
+  kamikazeCooldown: number; // ms until kamikaze drone is ready (0 = ready)
   currentEchelon?: number;
   totalEchelons?: number;
   activeThreats?: number;
