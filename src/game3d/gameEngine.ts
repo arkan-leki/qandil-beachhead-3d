@@ -150,7 +150,7 @@ export class GameEngine {
   // Mobile / gyroscope input
   public mobileControls!: MobileControls;
   public mobileSettings: MobileSettings = {
-    controlScheme: 'hybrid', gyroSensitivity: 1.0, gyroDeadZone: 0.06,
+    controlScheme: 'touch', gyroSensitivity: 1.0, gyroDeadZone: 0.06,
     invertY: false, autoFire: 'off', aimAssist: false, haptics: true,
   };
   public onMobileSettingsChange?: (s: MobileSettings) => void;

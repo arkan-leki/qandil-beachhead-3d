@@ -132,6 +132,38 @@ export default function App() {
   const [gyroSensitivity, setGyroSensitivity] = useState<number>(1.0);
   const [reducedMotion, setReducedMotion] = useState<boolean>(false);
   const [graphics, setGraphics] = useState<'low' | 'medium' | 'high'>('high');
+  const [controlScheme, setControlScheme] = useState<'touch' | 'gyro' | 'hybrid'>('touch');
+  const [isPortrait, setIsPortrait] = useState<boolean>(false);
+  const [isTouch, setIsTouch] = useState<boolean>(false);
+
+  // Detect touch devices & portrait orientation (force landscape on mobile)
+  useEffect(() => {
+    const touch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    setIsTouch(touch);
+    const check = () => setIsPortrait(window.innerHeight > window.innerWidth);
+    check();
+    window.addEventListener('resize', check);
+    window.addEventListener('orientationchange', check);
+    return () => {
+      window.removeEventListener('resize', check);
+      window.removeEventListener('orientationchange', check);
+    };
+  }, []);
+
+  // Try to lock to landscape on first user gesture (Android supports it; iOS ignores)
+  useEffect(() => {
+    const lock = async () => {
+      try {
+        const so = screen.orientation as unknown as { lock?: (o: string) => Promise<void> };
+        if (so && typeof so.lock === 'function') {
+          await so.lock('landscape');
+        }
+      } catch { /* unsupported / denied */ }
+    };
+    const onFirst = () => { lock(); window.removeEventListener('pointerdown', onFirst); };
+    window.addEventListener('pointerdown', onFirst);
+    return () => window.removeEventListener('pointerdown', onFirst);
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -369,7 +401,30 @@ export default function App() {
         onReducedMotion={(v) => { setReducedMotion(v); if (engineRef.current) engineRef.current.reducedMotion = v; }}
         graphics={graphics}
         onGraphics={(v) => { setGraphics(v); if (engineRef.current) engineRef.current.setGraphicsPreset(v); }}
+        controlScheme={controlScheme}
+        onControlScheme={(v) => {
+          setControlScheme(v);
+          const engine = engineRef.current;
+          if (engine) {
+            engine.setMobileSettings({ controlScheme: v });
+            // Ask permission in the same user gesture (iOS needs this)
+            if (v !== 'touch' && engine.mobileControls) {
+              engine.mobileControls.requestGyroPermission();
+            }
+          }
+        }}
       />
+
+      {/* Rotate-to-landscape prompt (mobile portrait) */}
+      {isTouch && isPortrait && gameState !== 'ready' && (
+        <div className="absolute inset-0 z-[60] bg-black/90 flex flex-col items-center justify-center gap-6 p-8 text-center">
+          <div className="text-6xl" style={{ animation: 'rotateHint 1.6s ease-in-out infinite' }}>📱↻</div>
+          <div className="font-mono text-xl font-bold text-amber-400 tracking-widest">ROTATE DEVICE</div>
+          <div className="font-mono text-xs text-zinc-400 max-w-xs leading-relaxed">
+            This battle is played in <b className="text-white">landscape</b>. Turn your phone sideways for full view and controls.
+          </div>
+        </div>
+      )}
     </div>
   );
 }

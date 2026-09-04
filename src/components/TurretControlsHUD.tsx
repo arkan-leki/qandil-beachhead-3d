@@ -1,7 +1,6 @@
-import React from 'react';
-import { Shield, Volume2, VolumeX, Crosshair, ZoomIn, RotateCcw, Plane } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Volume2, VolumeX, ZoomIn, Plane } from 'lucide-react';
 import { GameStats, RadarBlip, WeaponState, WeaponType } from '../types';
-import { RadarHUD } from './RadarHUD';
 
 interface TurretControlsHUDProps {
   stats: GameStats;
@@ -25,16 +24,22 @@ interface TurretControlsHUDProps {
   onSettings?: () => void;
 }
 
+const WEAPON_LIST: { type: WeaponType; key: string; short: string; icon: string }[] = [
+  { type: 'm60', key: '1', short: 'M60', icon: '🔫' },
+  { type: 'aa_gun', key: '2', short: 'ZU-23', icon: '🎯' },
+  { type: 'heavy_cannon', key: '3', short: '105MM', icon: '💥' },
+  { type: 'missile', key: '4', short: 'SAM', icon: '🚀' },
+  { type: 'handgun', key: '5', short: '.45', icon: '🔫' },
+];
+
 export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
   stats,
   weapons,
   currentWeapon,
-  radarBlips,
-  headingDeg,
-  zoomLevel,
   isMuted,
   isNight,
   autoFire,
+  zoomLevel,
   onSwitchWeapon,
   onReload,
   onToggleZoom,
@@ -43,7 +48,6 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
   onFireEnd,
   onAirstrike,
   onFlare,
-  onToggleAutoFire,
   onSettings,
 }) => {
   const activeW = weapons[currentWeapon];
@@ -51,9 +55,66 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
   const isCritical = hpPercent <= 25;
   const airstrikesAvailable = stats.airstrikesAvailable ?? 0;
 
+  // Wave banner: briefly announce the wave, then hide (no permanent header)
+  const [banner, setBanner] = useState<{ wave: number; night: boolean; key: number } | null>(null);
+  const prevWave = useRef(stats.wave);
+  useEffect(() => {
+    if (stats.wave !== prevWave.current) {
+      prevWave.current = stats.wave;
+      setBanner({ wave: stats.wave, night: isNight, key: Date.now() });
+      const t = setTimeout(() => setBanner(null), 2600);
+      return () => clearTimeout(t);
+    }
+  }, [stats.wave, isNight]);
+
+  // --- GTA-style weapon wheel: HOLD the guns button to open, release over a weapon ---
+  const [wheelOpen, setWheelOpen] = useState(false);
+  const [highlight, setHighlight] = useState<number>(-1);
+  const wheelHold = useRef<number | null>(null);
+  const wheelAnchor = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const wheelActive = useRef(false);
+
+  const wheelCenter = () => {
+    // wheel is rendered as a big circle centered near the bottom of the screen
+    return { x: window.innerWidth / 2, y: window.innerHeight * 0.62 };
+  };
+
+  const openWheel = (e: React.PointerEvent) => {
+    wheelAnchor.current = { x: e.clientX, y: e.clientY };
+    wheelHold.current = window.setTimeout(() => {
+      setWheelOpen(true);
+      wheelActive.current = true;
+      // highlight nothing yet; release picks weapon under finger
+      setHighlight(-1);
+    }, 180);
+  };
+
+  const moveWheel = (e: React.PointerEvent) => {
+    if (!wheelActive.current) return;
+    const c = wheelCenter();
+    const ang = Math.atan2(e.clientY - c.y, e.clientX - c.x) + Math.PI; // 0..2PI
+    const n = WEAPON_LIST.length;
+    // slots spread clockwise starting right
+    const slot = Math.floor(((ang / (Math.PI * 2)) * n + 0.5) % n);
+    setHighlight(slot);
+  };
+
+  const closeWheel = (e?: React.PointerEvent) => {
+    if (wheelHold.current) { clearTimeout(wheelHold.current); wheelHold.current = null; }
+    if (wheelActive.current) {
+      wheelActive.current = false;
+      if (e && highlight >= 0 && highlight < WEAPON_LIST.length) {
+        const w = WEAPON_LIST[highlight];
+        if (w.type !== currentWeapon) onSwitchWeapon(w.type);
+      }
+      setWheelOpen(false);
+      setHighlight(-1);
+    }
+  };
+
   return (
     <div
-      className="absolute inset-0 pointer-events-none select-none flex flex-col justify-between p-3 sm:p-5 overflow-hidden"
+      className="absolute inset-0 pointer-events-none select-none flex flex-col justify-between overflow-hidden"
       style={{
         paddingTop: 'max(0.75rem, env(safe-area-inset-top))',
         paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))',
@@ -61,269 +122,215 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
         paddingRight: 'max(0.75rem, env(safe-area-inset-right))',
       }}
     >
-      {/* Top Header Bar */}
+      {/* ---- Wave banner (transient) ---- */}
+      {banner && (
+        <div key={banner.key} className="absolute top-[16%] inset-x-0 flex justify-center pointer-events-none">
+          <div className={`px-8 py-3 rounded-sm border text-center ${
+            banner.night ? 'bg-indigo-950/80 border-indigo-500/70' : 'bg-black/75 border-amber-600/60'
+          }`} style={{ animation: 'waveIn 0.4s ease-out, fadeUp 2.2s ease-in 0.4s forwards' }}>
+            <div className="font-mono text-3xl font-black tracking-widest text-amber-400">WAVE {banner.wave}</div>
+            {banner.night && <div className="font-mono text-[11px] tracking-widest text-indigo-300">NIGHT MISSION — SEARCHLIGHT ACTIVE</div>}
+          </div>
+        </div>
+      )}
+
+      {/* ---- Top-left: compact score + night flare ---- */}
       <div className="flex items-start justify-between w-full">
-        {/* Score & Mission Status */}
-        <div className="bg-black/70 backdrop-blur-xs border border-zinc-700/60 p-2.5 sm:p-3.5 rounded-sm shadow-xl flex flex-col gap-1 pointer-events-auto">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-              <span className="text-[10px] font-mono tracking-widest text-zinc-400 font-bold uppercase">
-                QANDIL DEFENSE ZONE
-              </span>
-            </div>
-            {stats.difficulty && (
-              <span className={`text-[10px] font-mono font-extrabold uppercase px-1.5 py-0.5 rounded border ${
-                stats.difficulty === 'easy'
-                  ? 'text-emerald-400 bg-emerald-950/70 border-emerald-700'
-                  : stats.difficulty === 'hard'
-                  ? 'text-red-400 bg-red-950/70 border-red-700'
-                  : 'text-amber-400 bg-amber-950/70 border-amber-700'
-              }`}>
-                {stats.difficulty}
-              </span>
-            )}
-            {isNight && (
-              <span className="text-[10px] font-mono font-extrabold uppercase px-1.5 py-0.5 rounded border text-indigo-300 bg-indigo-950/80 border-indigo-600 animate-pulse">
-                NIGHT [F] FLARE
-              </span>
-            )}
+        <div className="flex flex-col gap-1.5">
+          <div className="bg-black/60 backdrop-blur-[2px] border border-zinc-700/50 rounded px-2.5 py-1 text-right pointer-events-auto">
+            <div className="text-[9px] font-mono text-zinc-500 tracking-[0.2em]">SCORE</div>
+            <div className="font-mono text-lg sm:text-xl font-bold text-amber-400 leading-none">{stats.score.toLocaleString()}</div>
           </div>
-          <div className="flex items-baseline flex-wrap gap-2 sm:gap-3">
-            <div className="text-xl sm:text-2xl font-bold font-mono text-amber-400 tracking-wider">
-              {stats.score.toLocaleString()} <span className="text-[11px] text-zinc-400 font-normal">PTS</span>
+          {isCritical && (
+            <div className="bg-red-950/80 border border-red-600 rounded px-2 py-1 font-mono text-[10px] text-red-300 font-bold tracking-widest animate-pulse pointer-events-none">
+              ⚠ {Math.round(hpPercent)}%
             </div>
-            <div className="text-xs font-mono text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/50">
-              WAVE {stats.wave}
-            </div>
-            <div className="text-[11px] font-mono text-cyan-400 bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-800/50">
-              ECHELON {stats.currentEchelon ?? 1}/{stats.totalEchelons ?? 3}
-            </div>
-            {stats.remainingWaveEnemies !== undefined && (
-              <div className="text-[11px] font-mono text-amber-400/90 bg-amber-950/50 px-1.5 py-0.5 rounded border border-amber-800/40">
-                THREATS: <b>{stats.activeThreats ?? 0} ACTIVE</b> &bull; {stats.remainingWaveEnemies} TOTAL
-              </div>
-            )}
-          </div>
-          <div className="text-[10px] text-zinc-400 font-mono flex flex-wrap gap-x-3 gap-y-0.5">
-            <span>TANKS: <b className="text-white">{stats.kills.tanks}</b></span>
-            <span>APCS: <b className="text-orange-400">{stats.kills.apcs ?? 0}</b></span>
-            <span>HELIS: <b className="text-cyan-400">{stats.kills.helicopters}</b></span>
-            <span>AIRBORNE: <b className="text-yellow-400">{stats.kills.paratroopers}</b></span>
-          </div>
+          )}
         </div>
 
-        {/* Center Radar & Compass */}
-        <div className="hidden sm:flex flex-col items-center">
-          <RadarHUD blips={radarBlips} headingDeg={headingDeg} />
-        </div>
-
-        {/* Top-Right Quick Controls & Sound */}
+        {/* Top-right: minimal action buttons */}
         <div className="flex flex-col items-end gap-2 pointer-events-auto">
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Tactical Airstrike Button */}
+          <div className="flex gap-1.5">
             <button
               onClick={onAirstrike}
               disabled={airstrikesAvailable <= 0}
-              className={`p-2 sm:px-3 sm:py-1.5 rounded text-xs font-mono flex items-center gap-1.5 transition-all border ${
-                airstrikesAvailable > 0
-                  ? 'bg-red-950/80 hover:bg-red-900 border-red-500 text-red-300 font-bold shadow-lg shadow-red-900/50 cursor-pointer animate-pulse'
-                  : 'bg-zinc-900/60 border-zinc-800 text-zinc-600 cursor-not-allowed opacity-50'
+              className={`w-9 h-9 rounded flex items-center justify-center border text-xs ${
+                airstrikesAvailable > 0 ? 'bg-red-950/80 border-red-500/70 text-red-300 animate-pulse' : 'bg-zinc-900/60 border-zinc-800 text-zinc-600'
               }`}
-              title="Call Supersonic Jet Airstrike (Key: B)"
+              title={`Airstrike (B) — ${airstrikesAvailable} left`}
             >
-              <Plane className="w-4 h-4 text-amber-400" />
-              <span className="font-bold">[B] AIRSTRIKE ({airstrikesAvailable})</span>
+              <Plane className="w-4 h-4" />
             </button>
-
+            {isNight && (
+              <button
+                onClick={onFlare}
+                className="w-9 h-9 rounded flex items-center justify-center border border-indigo-500/70 bg-indigo-950/80 text-lg"
+                title="Flare (F)"
+              >
+                💡
+              </button>
+            )}
             <button
               onClick={onToggleZoom}
-              className="p-2 sm:px-3 sm:py-1.5 bg-black/70 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 rounded text-xs font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Toggle Optics Zoom (Z / Mouse Wheel / Right-Click)"
+              className="w-9 h-9 rounded flex items-center justify-center border border-zinc-700 bg-black/60 text-zinc-200"
+              title={`Zoom (${zoomLevel}x)`}
             >
-              <ZoomIn className="w-4 h-4 text-amber-400" />
-              <span className="hidden sm:inline font-bold">{zoomLevel}x ZOOM</span>
+              <ZoomIn className="w-4 h-4" />
             </button>
-
-            <button
-              onClick={onFlare}
-              className={`p-2 sm:px-3 sm:py-1.5 rounded text-xs font-mono flex items-center gap-1.5 transition-colors border ${
-                isNight ? 'bg-indigo-950/80 hover:bg-indigo-900 border-indigo-500 text-indigo-200 font-bold' : 'bg-black/70 border-zinc-700 text-zinc-500'
-              }`}
-              title="Launch Flare (F) — illuminates the battlefield at night"
-            >
-              💡 <span className="hidden sm:inline font-bold">[F] FLARE</span>
-            </button>
-
-            <button
-              onClick={onToggleAutoFire}
-              className={`p-2 sm:px-3 sm:py-1.5 rounded text-xs font-mono flex items-center gap-1.5 transition-colors border ${
-                autoFire ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 font-bold' : 'bg-black/70 border-zinc-700 text-zinc-300'
-              }`}
-              title="Toggle Auto-Fire (fires when crosshair is over an enemy)"
-            >
-              🔫 <span className="hidden sm:inline font-bold">AUTO</span>
-            </button>
-
             <button
               onClick={onToggleMute}
-              className="p-2 bg-black/70 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 rounded text-xs font-mono transition-colors cursor-pointer"
-              title="Mute / Unmute Audio"
+              className="w-9 h-9 rounded flex items-center justify-center border border-zinc-700 bg-black/60"
+              title="Mute"
             >
               {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
             </button>
-
             <button
               onClick={onSettings}
-              className="p-2 bg-black/70 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 rounded text-xs font-mono transition-colors cursor-pointer"
+              className="w-9 h-9 rounded flex items-center justify-center border border-zinc-700 bg-black/60 text-lg"
               title="Settings"
             >
               ⚙️
             </button>
           </div>
-
-          {/* Small screen Radar */}
-          <div className="sm:hidden">
-            <RadarHUD blips={radarBlips} headingDeg={headingDeg} />
-          </div>
+          {autoFire && (
+            <div className="bg-emerald-950/80 border border-emerald-600/70 rounded px-1.5 py-0.5 font-mono text-[9px] text-emerald-300 font-bold tracking-widest pointer-events-none">
+              AUTO-FIRE
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Center Tactical Crosshairs & Reticle */}
+      {/* ---- Center reticle ---- */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center">
-        {/* Outer Circular Reticle */}
-        <div className="relative w-24 h-24 sm:w-28 sm:h-28 border border-white/25 rounded-full flex items-center justify-center">
-          {/* Elevation Mil-Dots / Lead marks */}
-          <div className="absolute top-0 bottom-0 w-px bg-white/30"></div>
-          <div className="absolute left-0 right-0 h-px bg-white/30"></div>
-
-          {/* Range rings */}
-          <div className="w-12 h-12 border border-emerald-400/40 rounded-full"></div>
-          <div className="w-2.5 h-2.5 border border-amber-400/80 rounded-full"></div>
-
-          {/* Corner brackets for missile lock or heavy cannon */}
-          <div className="absolute -top-2 -left-2 w-3 h-3 border-t-2 border-l-2 border-amber-400/70"></div>
-          <div className="absolute -top-2 -right-2 w-3 h-3 border-t-2 border-r-2 border-amber-400/70"></div>
-          <div className="absolute -bottom-2 -left-2 w-3 h-3 border-b-2 border-l-2 border-amber-400/70"></div>
-          <div className="absolute -bottom-2 -right-2 w-3 h-3 border-b-2 border-r-2 border-amber-400/70"></div>
-
-          {/* Dynamic Aim Lead Indicator */}
-          <div className="absolute bottom-1 right-2 text-[9px] font-mono text-amber-300 font-bold tracking-tighter">
-            {currentWeapon === 'm60' ? 'M60' : currentWeapon === 'aa_gun' ? 'FLAK' : currentWeapon === 'heavy_cannon' ? 'HE-AP' : currentWeapon === 'missile' ? 'SAM' : '.45'}
+        <div className="relative w-20 h-20 sm:w-28 sm:h-28 border border-white/25 rounded-full flex items-center justify-center">
+          <div className="absolute top-0 bottom-0 w-px bg-white/25"></div>
+          <div className="absolute left-0 right-0 h-px bg-white/25"></div>
+          <div className="w-10 h-10 border border-emerald-400/40 rounded-full"></div>
+          <div className="w-2 h-2 border border-amber-400/80 rounded-full"></div>
+          <div className="absolute -top-1.5 -left-1.5 w-2.5 h-2.5 border-t-2 border-l-2 border-amber-400/60"></div>
+          <div className="absolute -top-1.5 -right-1.5 w-2.5 h-2.5 border-t-2 border-r-2 border-amber-400/60"></div>
+          <div className="absolute -bottom-1.5 -left-1.5 w-2.5 h-2.5 border-b-2 border-l-2 border-amber-400/60"></div>
+          <div className="absolute -bottom-1.5 -right-1.5 w-2.5 h-2.5 border-b-2 border-r-2 border-amber-400/60"></div>
+          <div className="absolute bottom-0.5 right-1.5 text-[9px] font-mono text-amber-300 font-bold">
+            {WEAPON_LIST.find((w) => w.type === currentWeapon)?.short}
           </div>
         </div>
       </div>
 
-      {/* Bottom Command Dashboard */}
-      <div className="flex flex-col sm:flex-row items-end justify-between gap-3 w-full">
-        {/* Left: Bunker Structural Integrity */}
-        <div className={`bg-black/75 backdrop-blur-xs border ${isCritical ? 'border-red-500 animate-pulse bg-red-950/30' : 'border-zinc-700/60'} p-3 rounded-sm shadow-xl min-w-[200px] sm:min-w-[260px] pointer-events-auto`}>
-          <div className="flex items-center justify-between text-xs font-mono mb-1.5">
-            <span className="flex items-center gap-1.5 text-zinc-300 font-bold">
-              <Shield className={`w-4 h-4 ${isCritical ? 'text-red-500' : 'text-emerald-400'}`} />
-              BUNKER INTEGRITY
-            </span>
-            <span className={`font-mono font-bold ${isCritical ? 'text-red-400' : 'text-emerald-400'}`}>
-              {Math.round(hpPercent)}%
-            </span>
-          </div>
-
-          <div className="w-full h-3.5 bg-zinc-900 rounded-xs border border-zinc-700 overflow-hidden relative">
+      {/* ---- Bottom: health bar, weapon wheel trigger, fire ---- */}
+      <div className="flex items-end justify-between gap-2 w-full">
+        {/* Health (compact vertical-friendly) */}
+        <div className="w-16 sm:w-36 pointer-events-none flex flex-col gap-1">
+          <div className="h-2 sm:h-3 w-full bg-zinc-900/80 border border-zinc-700 rounded-sm overflow-hidden">
             <div
               className={`h-full transition-all duration-200 ${
-                isCritical
-                  ? 'bg-linear-to-r from-red-700 to-red-500'
-                  : hpPercent < 60
-                  ? 'bg-linear-to-r from-amber-600 to-amber-400'
-                  : 'bg-linear-to-r from-emerald-600 to-emerald-400'
+                isCritical ? 'bg-red-600' : hpPercent < 60 ? 'bg-amber-500' : 'bg-emerald-500'
               }`}
               style={{ width: `${hpPercent}%` }}
             ></div>
           </div>
-          {isCritical && (
-            <div className="text-[10px] font-mono text-red-400 font-bold mt-1 text-center tracking-widest">
-              WARNING: BUNKER BREACH IMMINENT
-            </div>
-          )}
+          <div className={`font-mono text-[10px] sm:text-xs font-bold ${isCritical ? 'text-red-400' : 'text-emerald-400'}`}>
+            {Math.round(hpPercent)}%
+          </div>
         </div>
 
-        {/* Center: Weapons Selector & Magazine Display */}
-        <div className="flex flex-col items-center gap-1.5 pointer-events-auto">
-          {/* Weapon Switch Tabs */}
-          <div className="flex bg-black/80 p-1 rounded border border-zinc-700/80 gap-1 backdrop-blur-xs shadow-xl">
-            {(
-              [
-                { type: 'm60', key: '1', short: 'M60 MG' },
-                { type: 'aa_gun', key: '2', short: 'ZU-23-2 AA' },
-                { type: 'heavy_cannon', key: '3', short: '105mm CANNON' },
-                { type: 'missile', key: '4', short: 'MISSILES' },
-                { type: 'handgun', key: '5', short: '.45 HG' },
-              ] as const
-            ).map((item) => {
-              const w = weapons[item.type];
-              const isSelected = currentWeapon === item.type;
-              return (
-                <button
-                  key={item.type}
-                  onClick={() => onSwitchWeapon(item.type)}
-                  className={`px-3 py-1.5 rounded text-xs font-mono transition-all flex flex-col items-center min-w-[85px] sm:min-w-[110px] ${
-                    isSelected
-                      ? 'bg-amber-600 text-white font-bold shadow-md shadow-amber-900/50'
-                      : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
-                  }`}
-                >
-                  <span className="text-[9px] opacity-75">[{item.key}] {item.short}</span>
-                  <span className="text-sm font-bold mt-0.5">
-                    {w.reloading ? 'RELOADING' : w.unlimited && item.type !== 'handgun' ? 'INF' : `${w.ammo} / ${w.maxAmmo}`}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Current Weapon Detail & Reload Bar */}
-          <div className="flex items-center gap-3 bg-black/70 px-3 py-1 rounded text-xs font-mono border border-zinc-800 text-zinc-300">
-            <span>AMMO: <b className="text-amber-400">{activeW.unlimited && currentWeapon !== 'handgun' ? 'INF' : activeW.ammo}</b></span>
-            {activeW.reloading ? (
-              <span className="text-red-400 font-bold animate-pulse">RELOADING...</span>
-            ) : (
-              <button
-                onClick={() => onReload(currentWeapon)}
-                className="text-[11px] text-zinc-400 hover:text-white flex items-center gap-1 bg-zinc-800/80 px-2 py-0.5 rounded border border-zinc-700 transition-colors"
-                title="Reload weapon (R)"
-              >
-                <RotateCcw className="w-3 h-3" /> [R] RELOAD
-              </button>
-            )}
+        {/* Weapon wheel trigger + active weapon readout */}
+        <div className="flex flex-col items-center gap-1">
+          <div className="flex items-center gap-2 bg-black/70 border border-zinc-700/60 rounded px-2 py-0.5 font-mono text-[10px] text-zinc-300">
+            <span className="text-amber-400 font-bold">{WEAPON_LIST.find((w) => w.type === currentWeapon)?.icon}</span>
+            <span className="font-bold text-white tracking-wider">{WEAPON_LIST.find((w) => w.type === currentWeapon)?.short}</span>
+            <span className="text-zinc-400">
+              {activeW.reloading ? 'RELOADING' : activeW.unlimited && currentWeapon !== 'handgun' ? 'INF' : `${activeW.ammo}`}
+            </span>
             {currentWeapon === 'm60' && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-zinc-400">HEAT</span>
-                <div className="w-24 h-2.5 bg-zinc-900 rounded-xs border border-zinc-700 overflow-hidden">
-                  <div
-                    className={`h-full transition-all ${(activeW.heat ?? 0) >= 1 ? 'bg-red-500' : (activeW.heat ?? 0) > 0.6 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+              <span className="flex items-center gap-1">
+                <span className="w-10 h-1.5 bg-zinc-800 rounded overflow-hidden">
+                  <span
+                    className={`block h-full ${(activeW.heat ?? 0) >= 1 ? 'bg-red-500' : (activeW.heat ?? 0) > 0.6 ? 'bg-amber-500' : 'bg-emerald-500'}`}
                     style={{ width: `${((activeW.heat ?? 0) * 100).toFixed(0)}%` }}
-                  ></div>
-                </div>
-                {(activeW.overheated) && <span className="text-[10px] text-red-400 font-bold animate-pulse">OVERHEAT!</span>}
-              </div>
+                  ></span>
+                </span>
+              </span>
             )}
+            {(activeW.overheated) && <span className="text-red-400 font-bold animate-pulse">OVERHEAT!</span>}
+            {activeW.reloading ? null : (
+              <button onClick={() => onReload(currentWeapon)} className="text-zinc-400 hover:text-white px-1" title="Reload (R)">↻</button>
+            )}
+          </div>
+
+          {/* HOLD-TO-OPEN weapon wheel (GTA style) */}
+          <button
+            onPointerDown={(e) => openWheel(e)}
+            onPointerMove={(e) => moveWheel(e)}
+            onPointerUp={(e) => closeWheel(e)}
+            onPointerLeave={() => closeWheel()}
+            onPointerCancel={() => closeWheel()}
+            className="pointer-events-auto relative w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-zinc-900/85 border-2 border-amber-500/80 shadow-xl flex items-center justify-center text-white active:scale-95 transition-transform font-mono font-bold text-[10px]"
+            title="Hold to switch weapon (1-5 on keyboard)"
+          >
+            <div className="flex flex-col items-center leading-none gap-0.5">
+              <span className="text-2xl">🔫</span>
+              <span>GUNS</span>
+            </div>
+            <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-amber-400 animate-pulse"></span>
+          </button>
+          <div className="font-mono text-[8px] text-zinc-500 tracking-widest pointer-events-none">
+            TAP FIRE · HOLD GUNS
           </div>
         </div>
 
-        {/* Right: Mobile Touch Trigger Controls */}
-        <div className="flex items-center gap-3 pointer-events-auto">
+        {/* Fire button */}
+        <div className="pointer-events-auto flex flex-col items-end gap-1">
           <button
             onMouseDown={onFireStart}
             onMouseUp={onFireEnd}
             onTouchStart={onFireStart}
             onTouchEnd={onFireEnd}
-            className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-linear-to-b from-red-600 to-red-800 border-4 border-amber-500/80 shadow-2xl flex flex-col items-center justify-center text-white active:scale-95 transition-transform"
+            className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-linear-to-b from-red-600 to-red-800 border-4 border-amber-500/80 shadow-2xl flex flex-col items-center justify-center text-white active:scale-95 transition-transform"
           >
-            <Crosshair className="w-7 h-7 mb-0.5" />
-            <span className="text-xs font-bold font-mono tracking-wider">FIRE</span>
+            <span className="text-lg leading-none mb-0.5">🔥</span>
+            <span className="text-[9px] font-bold font-mono tracking-wider">FIRE</span>
           </button>
         </div>
       </div>
+
+      {/* ---- Weapon wheel overlay ---- */}
+      {wheelOpen && (
+        <div className="absolute inset-0 pointer-events-none z-40">
+          <div className="absolute" style={{ left: wheelCenter().x - 130, top: wheelCenter().y - 130, width: 260, height: 260 }}>
+            {WEAPON_LIST.map((w, i) => {
+              const ang = (i / WEAPON_LIST.length) * Math.PI * 2 - Math.PI / 2; // start top
+              const r = 100;
+              const x = 130 + Math.cos(ang) * r;
+              const y = 130 + Math.sin(ang) * r;
+              const isSel = i === highlight;
+              const isCur = w.type === currentWeapon;
+              return (
+                <div
+                  key={w.type}
+                  className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 flex flex-col items-center justify-center transition-all ${
+                    isSel
+                      ? 'bg-amber-500/90 border-white scale-110'
+                      : isCur
+                      ? 'bg-amber-900/80 border-amber-300'
+                      : 'bg-zinc-900/85 border-zinc-600'
+                  } w-20 h-20 text-center text-white`}
+                  style={{ left: x, top: y }}
+                >
+                  <span className="text-xl leading-none">{w.icon}</span>
+                  <span className="font-mono text-[9px] font-bold">{w.short}</span>
+                  <span className="font-mono text-[8px] opacity-80">
+                    {weapons[w.type].unlimited && w.type !== 'handgun' ? 'INF' : weapons[w.type].ammo}
+                  </span>
+                </div>
+              );
+            })}
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-zinc-900 border-2 border-amber-400 flex items-center justify-center font-mono text-[8px] text-amber-300 text-center leading-tight">
+              HOLD<br />RELEASE
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

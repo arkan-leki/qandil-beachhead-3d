@@ -11,6 +11,7 @@ export interface SettingsPanelProps {
   gyroSensitivity: number;
   reducedMotion: boolean;
   graphics: 'low' | 'medium' | 'high';
+  controlScheme: 'touch' | 'gyro' | 'hybrid';
   onAutoFire: (v: 'off' | 'on' | 'smart') => void;
   onAimAssist: (v: boolean) => void;
   onHaptics: (v: boolean) => void;
@@ -18,11 +19,12 @@ export interface SettingsPanelProps {
   onGyroSensitivity: (v: number) => void;
   onReducedMotion: (v: boolean) => void;
   onGraphics: (v: 'low' | 'medium' | 'high') => void;
+  onControlScheme: (v: 'touch' | 'gyro' | 'hybrid') => void;
 }
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   open, onClose, autoFire, aimAssist, haptics, invertY, gyroSensitivity, reducedMotion, graphics,
-  onAutoFire, onAimAssist, onHaptics, onInvertY, onGyroSensitivity, onReducedMotion, onGraphics,
+  controlScheme, onAutoFire, onAimAssist, onHaptics, onInvertY, onGyroSensitivity, onReducedMotion, onGraphics, onControlScheme,
 }) => {
   if (!open) return null;
   return (
@@ -54,6 +56,37 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 </button>
               ))}
             </div>
+          </div>
+
+          <div>
+            <label className="block text-zinc-400 text-xs mb-1">AIM CONTROL (MOBILE)</label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => onControlScheme('touch')}
+                className={`px-3 py-1.5 rounded border text-xs uppercase ${
+                  controlScheme === 'touch' ? 'bg-emerald-700 border-emerald-400 text-white' : 'bg-zinc-900 border-zinc-700 text-zinc-400'
+                }`}
+              >
+                DRAG
+              </button>
+              <button
+                onClick={() => onControlScheme('gyro')}
+                className={`px-3 py-1.5 rounded border text-xs uppercase ${
+                  controlScheme === 'gyro' ? 'bg-emerald-700 border-emerald-400 text-white' : 'bg-zinc-900 border-zinc-700 text-zinc-400'
+                }`}
+              >
+                GYRO
+              </button>
+              <button
+                onClick={() => onControlScheme('hybrid')}
+                className={`px-3 py-1.5 rounded border text-xs uppercase ${
+                  controlScheme === 'hybrid' ? 'bg-emerald-700 border-emerald-400 text-white' : 'bg-zinc-900 border-zinc-700 text-zinc-400'
+                }`}
+              >
+                BOTH
+              </button>
+            </div>
+            <p className="text-[10px] text-zinc-500 mt-1">DRAG is recommended — gyro can feel wobbly.</p>
           </div>
 
           <div>

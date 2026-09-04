@@ -24,7 +24,7 @@ export interface MobileSettings {
 }
 
 export const DEFAULT_MOBILE_SETTINGS: MobileSettings = {
-  controlScheme: 'hybrid',
+  controlScheme: 'touch',   // gyro OFF by default — touch drag is far more reliable
   gyroSensitivity: 1.0,
   gyroDeadZone: 0.06,
   invertY: false,
@@ -101,7 +101,10 @@ export class MobileControls {
 
   public init() {
     if (!this.isTouchDevice) return;
-    this.setupGyroscope();
+    // Gyro is only attached when the user explicitly picks a gyro scheme
+    if (this.settings.controlScheme !== 'touch') {
+      this.setupGyroscope();
+    }
     this.setupTouch();
     this.attached = true;
   }
@@ -113,6 +116,14 @@ export class MobileControls {
   public setSettings(s: Partial<MobileSettings>) {
     this.settings = { ...this.settings, ...s };
     saveMobileSettings(this.settings);
+    // Attach gyro the moment the user enables a gyro scheme
+    if (this.settings.controlScheme !== 'touch' && !this.gyroAvailable) {
+      this.setupGyroscope();
+    }
+  }
+
+  public get usesGyro(): boolean {
+    return this.settings.controlScheme !== 'touch' && this.gyroGranted;
   }
 
   public vibrate(pattern: number | number[]) {

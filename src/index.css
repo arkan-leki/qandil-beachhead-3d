@@ -1,1 +1,16 @@
 @import "tailwindcss";
+
+/* Wave banner entrance + fade */
+@keyframes waveIn {
+  from { transform: scale(1.6); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@keyframes fadeUp {
+  from { transform: translateY(0); opacity: 1; }
+  to { transform: translateY(-12px); opacity: 0; }
+}
+@keyframes rotateHint {
+  0%, 20% { transform: rotate(0deg); }
+  60% { transform: rotate(90deg); }
+  100% { transform: rotate(90deg); }
+}
