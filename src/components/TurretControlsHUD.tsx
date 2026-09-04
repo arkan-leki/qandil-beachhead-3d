@@ -153,21 +153,36 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
 
       {/* ---- Top row: score (left) · 360 radar/compass (centre) · buttons (right) ---- */}
       <div className="flex items-start justify-between w-full gap-2">
-        <div className="flex flex-col gap-1.5">
-          <div className="bg-black/60 backdrop-blur-[2px] border border-zinc-700/50 rounded px-2.5 py-1 text-right pointer-events-auto">
-            <div className="text-[9px] font-mono text-zinc-500 tracking-[0.2em]">SCORE</div>
-            <div className="font-mono text-lg sm:text-xl font-bold text-amber-400 leading-none">{stats.score.toLocaleString()}</div>
+        {/* Top-LEFT: score + wave detail cluster */}
+        <div className="flex flex-col gap-1.5 items-start">
+          <div className="flex items-stretch gap-1.5 pointer-events-auto">
+            {/* Score */}
+            <div className="bg-black/60 backdrop-blur-[2px] border border-zinc-700/50 rounded px-2.5 py-1 text-right">
+              <div className="text-[8px] font-mono text-zinc-500 tracking-[0.2em]">SCORE</div>
+              <div className="font-mono text-lg sm:text-xl font-bold text-amber-400 leading-none">{stats.score.toLocaleString()}</div>
+            </div>
+            {/* Wave */}
+            <div className="bg-black/60 backdrop-blur-[2px] border border-zinc-700/50 rounded px-2 py-1 text-center">
+              <div className="text-[8px] font-mono text-zinc-500 tracking-[0.2em]">WAVE</div>
+              <div className="font-mono text-lg sm:text-xl font-bold text-emerald-400 leading-none">{stats.wave}</div>
+            </div>
+            {/* Echelon */}
+            <div className="bg-black/60 backdrop-blur-[2px] border border-zinc-700/50 rounded px-2 py-1 text-center">
+              <div className="text-[8px] font-mono text-zinc-500 tracking-[0.2em]">ECH</div>
+              <div className="font-mono text-lg sm:text-xl font-bold text-cyan-400 leading-none">{stats.currentEchelon ?? 1}</div>
+            </div>
           </div>
+
           {isCritical && (
             <div className="bg-red-950/80 border border-red-600 rounded px-2 py-1 font-mono text-[10px] text-red-300 font-bold tracking-widest animate-pulse pointer-events-none">
               ⚠ {Math.round(hpPercent)}%
             </div>
           )}
-        </div>
 
-        {/* Centre: 360° compass + enemy radar in one */}
-        <div className="flex flex-col items-center scale-75 sm:scale-100 origin-top">
-          <RadarHUD blips={radarBlips} headingDeg={headingDeg} />
+          {/* 360° compass + enemy radar (bottom-left corner) */}
+          <div className="scale-75 sm:scale-90 origin-top-left">
+            <RadarHUD blips={radarBlips} headingDeg={headingDeg} />
+          </div>
         </div>
 
         {/* Top-right: minimal action buttons */}
