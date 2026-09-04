@@ -135,6 +135,27 @@ export default function App() {
   const [controlScheme, setControlScheme] = useState<'touch' | 'gyro' | 'hybrid'>('touch');
   const [isPortrait, setIsPortrait] = useState<boolean>(false);
   const [isTouch, setIsTouch] = useState<boolean>(false);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+
+  // Fullscreen toggle
+  useEffect(() => {
+    const onFs = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+      // ensure the 3D canvas refits the new viewport
+      setTimeout(() => engineRef.current?.handleResize(), 30);
+    };
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
+  }, []);
+  const handleFullscreen = () => {
+    try {
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+      } else {
+        document.documentElement.requestFullscreen();
+      }
+    } catch { /* not supported */ }
+  };
 
   // Detect touch devices & portrait orientation (force landscape on mobile)
   useEffect(() => {
@@ -370,6 +391,8 @@ export default function App() {
         onFlare={handleFireFlare}
         onToggleAutoFire={handleToggleAutoFire}
         onSettings={() => setSettingsOpen(true)}
+        onFullscreen={handleFullscreen}
+        isFullscreen={isFullscreen}
       />
 
       {/* Overlays: Start Briefing, Wave Clear, Game Over */}

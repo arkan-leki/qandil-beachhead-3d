@@ -22,6 +22,8 @@ interface TurretControlsHUDProps {
   onFlare?: () => void;
   onToggleAutoFire?: () => void;
   onSettings?: () => void;
+  onFullscreen?: () => void;
+  isFullscreen?: boolean;
 }
 
 const WEAPON_LIST: { type: WeaponType; key: string; short: string; icon: string }[] = [
@@ -49,6 +51,8 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
   onAirstrike,
   onFlare,
   onSettings,
+  onFullscreen,
+  isFullscreen,
 }) => {
   const activeW = weapons[currentWeapon];
   const hpPercent = (stats.baseHealth / stats.maxBaseHealth) * 100;
@@ -193,6 +197,13 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
               title="Mute"
             >
               {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
+            </button>
+            <button
+              onClick={onFullscreen}
+              className="w-9 h-9 rounded flex items-center justify-center border border-zinc-700 bg-black/60 text-zinc-200"
+              title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+            >
+              {isFullscreen ? '🡼' : '⛶'}
             </button>
             <button
               onClick={onSettings}

@@ -739,6 +739,10 @@ export class GameEngine {
     this.renderer.setSize(w, h);
   }
 
+  public handleResize() {
+    this.onWindowResize();
+  }
+
   /* ================= COMBAT & FIRING ================= */
   public triggerFire() {
     const now = performance.now();
