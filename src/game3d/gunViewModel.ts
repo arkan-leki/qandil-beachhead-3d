@@ -1,12 +1,11 @@
 /**
- * First-Person Gun Viewmodel — TWO screen-side guns.
+ * First-Person Gun Viewmodel.
  *
- * Renders two separate turret barrels in the player's first-person view:
- * one rising from the bottom-LEFT of the screen, one from the bottom-RIGHT,
- * both angling in toward the horizon. Each shot fires a single side
- * alternately (left → right → left ...), with recoil + muzzle flash on the
- * fired gun and a small inward sway. Weapon type changes the barrel profile
- * (slim M60 / 23mm ZU / thick 105mm / rocket pods / handgun fallback).
+ * Two modes:
+ *  - TWO screen-side turret barrels (AA / cannon) — one rising from bottom-left,
+ *    one from bottom-right, angling toward the horizon, firing alternately.
+ *  - ONE-HANDED weapon (M60 / rocket / handgun) — a single gun held at the
+ *    bottom-right of the view, like a normal FPS.
  */
 import * as THREE from 'three';
 import { WeaponType } from '../types';
@@ -23,24 +22,30 @@ interface UnitRefs {
 export class GunViewModel {
   public group: THREE.Group;
 
-  private leftUnit!: THREE.Group;
-  private rightUnit!: THREE.Group;
+  // Twin screen-side guns (AA + cannon)
+  private twin = new THREE.Group();
   private left = {} as UnitRefs;
   private right = {} as UnitRefs;
-  private handgunGroup = new THREE.Group();
-
   private leftBarrelLen = 1.5;
   private rightBarrelLen = 1.5;
+
+  // One-handed weapon (M60 / rocket / handgun)
+  private single = new THREE.Group();
+  private singleBarrel = new THREE.Mesh();
+  private singleShroud = new THREE.Group();
+  private singlePod = new THREE.Group();
+  private handgun = new THREE.Group();
+  private singleFlash = new THREE.Mesh();
+  private singleLight = new THREE.PointLight();
 
   // Recoil & animation
   private currentRecoil: number = 0;
   private targetRecoil: number = 0;
   private muzzleFlashTimer: number = 0;
   private idleTime: number = 0;
-  private lastSide: number = -1; // -1 left, +1 right, 0 centre
+  private lastSide: number = -1;
   private weaponType: WeaponType = 'aa_gun';
 
-  // Spent brass casings
   private casings: { mesh: THREE.Mesh; velocity: THREE.Vector3; rotSpeed: THREE.Vector3; life: number }[] = [];
   private casingGeo: THREE.CylinderGeometry;
   private casingMat: THREE.MeshStandardMaterial;
@@ -54,101 +59,149 @@ export class GunViewModel {
     const highlightMat = new THREE.MeshStandardMaterial({ color: 0x3d4347, roughness: 0.25, metalness: 0.7 });
     const brassMat = new THREE.MeshStandardMaterial({ color: 0xc8a652, roughness: 0.3, metalness: 0.9 });
 
-    // ---- Build one screen-side gun unit, mirrored per side ----
+    // ============ TWIN SCREEN-SIDE GUNS ============
     const buildUnit = (side: -1 | 1): UnitRefs => {
       const refs = {} as UnitRefs;
       refs.group = new THREE.Group();
+      // Keep the units mostly offscreen so they don't cover the view;
+      // only the barrel tips angle toward the centre.
+      refs.group.position.set(side * 0.72, -0.52, -0.85);
+      refs.group.rotation.set(0.28, side * 0.14, 0);
 
-      // Bottom-left / bottom-right anchor (camera space), angled inward + up
-      refs.group.position.set(side * 0.5, -0.30, -0.7);
-      refs.group.rotation.set(0.22, side * 0.12, 0); // pitch up, yaw inward
-
-      // Receiver / breech block emerging from the corner
-      const baseGeo = new THREE.BoxGeometry(0.24, 0.24, 0.5);
+      const baseGeo = new THREE.BoxGeometry(0.22, 0.22, 0.5);
       refs.base = new THREE.Mesh(baseGeo, gunSteelMat);
-      refs.base.position.set(0, -0.12, 0.18);
+      refs.base.position.set(0, -0.1, 0.18);
       refs.group.add(refs.base);
 
-      // Barrel (shared geometry; scaled per weapon in setWeapon)
-      const barrelGeo = new THREE.CylinderGeometry(0.05, 0.055, 1.5, 14);
-      barrelGeo.rotateX(Math.PI / 2); // along -Z
-      const barrel = new THREE.Mesh(barrelGeo, gunSteelMat);
-      barrel.position.set(0, 0.04, -0.75);
-      refs.group.add(barrel);
-      refs.barrel = barrel;
+      const barrelGeo = new THREE.CylinderGeometry(0.045, 0.05, 1.5, 14);
+      barrelGeo.rotateX(Math.PI / 2);
+      refs.barrel = new THREE.Mesh(barrelGeo, gunSteelMat);
+      refs.barrel.position.set(0, 0.03, -0.75);
+      refs.group.add(refs.barrel);
 
-      // Muzzle brake at the tip
-      const brakeGeo = new THREE.CylinderGeometry(0.075, 0.085, 0.22, 14);
+      const brakeGeo = new THREE.CylinderGeometry(0.07, 0.08, 0.2, 14);
       brakeGeo.rotateX(Math.PI / 2);
       const brake = new THREE.Mesh(brakeGeo, darkTrimMat);
-      brake.position.set(0, 0.04, -1.5);
+      brake.position.set(0, 0.03, -1.48);
       refs.group.add(brake);
 
-      // Feed tray / sight rail on top
-      const railGeo = new THREE.BoxGeometry(0.1, 0.05, 0.6);
+      const railGeo = new THREE.BoxGeometry(0.09, 0.04, 0.55);
       const rail = new THREE.Mesh(railGeo, highlightMat);
-      rail.position.set(0, 0.14, -0.5);
+      rail.position.set(0, 0.12, -0.5);
       refs.group.add(rail);
 
-      // Muzzle flash (hidden, at tip)
       const flashMat = new THREE.MeshBasicMaterial({ color: 0xffe066, transparent: true, opacity: 0 });
-      refs.flash = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), flashMat);
-      refs.flash.position.set(0, 0.04, -1.62);
+      refs.flash = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 8), flashMat);
+      refs.flash.position.set(0, 0.03, -1.6);
       refs.group.add(refs.flash);
 
       refs.light = new THREE.PointLight(0xffaa33, 0, 8);
-      refs.light.position.set(0, 0.04, -1.62);
+      refs.light.position.set(0, 0.03, -1.6);
       refs.group.add(refs.light);
 
-      // Rocket pod (shown for the missile weapon)
       refs.pod = new THREE.Group();
-      const podBoxGeo = new THREE.BoxGeometry(0.22, 0.22, 0.6);
+      const podBoxGeo = new THREE.BoxGeometry(0.2, 0.2, 0.55);
       const podBox = new THREE.Mesh(podBoxGeo, darkTrimMat);
-      podBox.position.set(0, 0.05, -0.4);
+      podBox.position.set(0, 0.04, -0.4);
       refs.pod.add(podBox);
-      const tubeGeo = new THREE.CylinderGeometry(0.035, 0.035, 0.1, 10);
-      tubeGeo.rotateX(Math.PI / 2);
-      for (let ty = -0.05; ty <= 0.05; ty += 0.1) {
-        for (let tx = -0.06; tx <= 0.06; tx += 0.12) {
-          const tube = new THREE.Mesh(tubeGeo, gunSteelMat);
-          tube.position.set(tx, 0.05 + ty, -0.72);
-          refs.pod.add(tube);
-        }
-      }
       refs.pod.visible = false;
       refs.group.add(refs.pod);
 
+      this.twin.add(refs.group);
       return refs;
     };
 
     this.left = buildUnit(-1);
     this.right = buildUnit(1);
-    this.leftUnit = this.left.group;
-    this.rightUnit = this.right.group;
-    this.group.add(this.leftUnit, this.rightUnit);
+    // tiny extra scale keeps them from filling the screen
+    this.twin.scale.setScalar(0.85);
+    this.group.add(this.twin);
 
-    // ---- Handgun fallback (singleton, centre) ----
-    const hgSlideGeo = new THREE.BoxGeometry(0.055, 0.05, 0.22);
-    const hgSlide = new THREE.Mesh(hgSlideGeo, darkTrimMat);
+    // ============ ONE-HANDED WEAPON ============
+    this.single.position.set(0.28, -0.30, -0.6); // held bottom-right
+    this.single.rotation.set(0.03, -0.1, -0.02);
+
+    const sBase = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.16, 0.55), gunSteelMat);
+    sBase.position.set(0, 0, 0);
+    this.single.add(sBase);
+
+    const sTop = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.05, 0.42), highlightMat);
+    sTop.position.set(0, 0.09, -0.04);
+    this.single.add(sTop);
+
+    const sBarrelGeo = new THREE.CylinderGeometry(0.026, 0.028, 1.15, 12);
+    sBarrelGeo.rotateX(Math.PI / 2);
+    this.singleBarrel = new THREE.Mesh(sBarrelGeo, gunSteelMat);
+    this.singleBarrel.position.set(0, 0.01, -0.27 - 0.575);
+    this.single.add(this.singleBarrel);
+
+    // shroud
+    this.singleShroud = new THREE.Group();
+    const shroudGeo = new THREE.CylinderGeometry(0.046, 0.046, 0.65, 12, 1, true);
+    shroudGeo.rotateX(Math.PI / 2);
+    const shroudMesh = new THREE.Mesh(shroudGeo, darkTrimMat);
+    shroudMesh.position.set(0, 0.01, -0.62);
+    this.singleShroud.add(shroudMesh);
+    const ringGeo = new THREE.TorusGeometry(0.048, 0.007, 8, 16);
+    for (let i = 0; i < 14; i++) {
+      const ring = new THREE.Mesh(ringGeo, highlightMat);
+      ring.position.set(0, 0.01, -0.32 - i * 0.042);
+      this.singleShroud.add(ring);
+    }
+    this.single.add(this.singleShroud);
+
+    // muzzle brake
+    const sBrake = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.04, 0.12, 10), darkTrimMat);
+    sBrake.geometry.rotateX(Math.PI / 2);
+    sBrake.position.set(0, 0.01, -1.42);
+    this.single.add(sBrake);
+
+    // single muzzle flash
+    const sFlashMat = new THREE.MeshBasicMaterial({ color: 0xffe066, transparent: true, opacity: 0 });
+    this.singleFlash = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), sFlashMat);
+    this.singleFlash.position.set(0, 0.01, -1.52);
+    this.single.add(this.singleFlash);
+    this.singleLight = new THREE.PointLight(0xffaa33, 0, 8);
+    this.singleLight.position.set(0, 0.01, -1.52);
+    this.single.add(this.singleLight);
+
+    // rocket pod (missile)
+    this.singlePod = new THREE.Group();
+    const podBox = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.22, 0.65), darkTrimMat);
+    podBox.position.set(0, 0.05, -0.45);
+    this.singlePod.add(podBox);
+    const tubeGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.1, 10);
+    tubeGeo.rotateX(Math.PI / 2);
+    for (let ty = -0.045; ty <= 0.045; ty += 0.09) {
+      for (let tx = -0.06; tx <= 0.06; tx += 0.12) {
+        const tube = new THREE.Mesh(tubeGeo, gunSteelMat);
+        tube.position.set(tx, 0.05 + ty, -0.78);
+        this.singlePod.add(tube);
+      }
+    }
+    this.singlePod.visible = false;
+    this.single.add(this.singlePod);
+
+    this.group.add(this.single);
+
+    // ============ HANDGUN (one-handed) ============
+    this.handgun.position.set(0.26, -0.3, -0.55);
+    const hgSlide = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.05, 0.22), darkTrimMat);
     hgSlide.position.set(0, 0.03, -0.35);
-    this.handgunGroup.add(hgSlide);
-    const hgFrameGeo = new THREE.BoxGeometry(0.05, 0.06, 0.16);
-    const hgFrame = new THREE.Mesh(hgFrameGeo, gunSteelMat);
+    this.handgun.add(hgSlide);
+    const hgFrame = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.06, 0.16), gunSteelMat);
     hgFrame.position.set(0, 0.005, -0.22);
     hgFrame.rotation.x = -0.15;
-    this.handgunGroup.add(hgFrame);
-    const hgBarrelGeo = new THREE.CylinderGeometry(0.014, 0.016, 0.1, 8);
-    hgBarrelGeo.rotateX(Math.PI / 2);
-    const hgBarrel = new THREE.Mesh(hgBarrelGeo, gunSteelMat);
+    this.handgun.add(hgFrame);
+    const hgBarrel = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.016, 0.1, 8), gunSteelMat);
+    hgBarrel.geometry.rotateX(Math.PI / 2);
     hgBarrel.position.set(0, 0.03, -0.47);
-    this.handgunGroup.add(hgBarrel);
-    const hgGripGeo = new THREE.BoxGeometry(0.045, 0.09, 0.06);
-    const hgGrip = new THREE.Mesh(hgGripGeo, darkTrimMat);
+    this.handgun.add(hgBarrel);
+    const hgGrip = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.09, 0.06), darkTrimMat);
     hgGrip.position.set(0, -0.05, -0.2);
     hgGrip.rotation.x = 0.25;
-    this.handgunGroup.add(hgGrip);
-    this.handgunGroup.visible = false;
-    this.group.add(this.handgunGroup);
+    this.handgun.add(hgGrip);
+    this.group.add(this.handgun);
 
     this.casingGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.045, 6);
     this.casingMat = brassMat;
@@ -156,47 +209,38 @@ export class GunViewModel {
     this.setWeapon('aa_gun');
   }
 
-  // Size a barrel to (radius, length) and keep it anchored at the unit origin.
   private shapeBarrel(refs: UnitRefs, ref: 'left' | 'right', radius: number, length: number) {
-    const barrel = refs.barrel;
-    barrel.scale.set(radius / 0.05, radius / 0.05, length / 1.5);
-    barrel.position.set(0, 0.04, -length / 2);
+    const b = refs.barrel;
+    b.scale.set(radius / 0.045, radius / 0.045, length / 1.5);
+    b.position.set(0, 0.03, -length / 2);
     if (ref === 'left') this.leftBarrelLen = length; else this.rightBarrelLen = length;
   }
 
   public setWeapon(type: WeaponType) {
     this.weaponType = type;
-    const showUnits = type !== 'handgun';
-    this.leftUnit.visible = showUnits;
-    this.rightUnit.visible = showUnits;
-    this.handgunGroup.visible = type === 'handgun';
+    const isTwin = type === 'aa_gun' || type === 'heavy_cannon';
+    this.twin.visible = isTwin;
+    this.single.visible = type === 'm60' || type === 'missile';
+    this.handgun.visible = type === 'handgun';
 
-    if (type === 'm60') {
-      this.shapeBarrel(this.left, 'left', 0.028, 1.15);
-      this.shapeBarrel(this.right, 'right', 0.028, 1.15);
-      this.left.pod.visible = false;
-      this.right.pod.visible = false;
-    } else if (type === 'aa_gun') {
-      this.shapeBarrel(this.left, 'left', 0.05, 1.5);   // 23mm ZU-23
+    if (type === 'aa_gun') {
+      this.shapeBarrel(this.left, 'left', 0.05, 1.5);
       this.shapeBarrel(this.right, 'right', 0.05, 1.5);
       this.left.pod.visible = false;
       this.right.pod.visible = false;
     } else if (type === 'heavy_cannon') {
-      this.shapeBarrel(this.left, 'left', 0.09, 1.75);  // 105mm
+      this.shapeBarrel(this.left, 'left', 0.09, 1.75);
       this.shapeBarrel(this.right, 'right', 0.09, 1.75);
       this.left.pod.visible = false;
       this.right.pod.visible = false;
+    } else if (type === 'm60') {
+      this.singleBarrel.visible = true;
+      this.singleShroud.visible = true;
+      this.singlePod.visible = false;
     } else if (type === 'missile') {
-      // Hidden barrels, rocket pods on each side
-      this.left.barrel.visible = false;
-      this.right.barrel.visible = false;
-      this.left.pod.visible = true;
-      this.right.pod.visible = true;
-    } else {
-      this.shapeBarrel(this.left, 'left', 0.028, 1.15);
-      this.shapeBarrel(this.right, 'right', 0.028, 1.15);
-      this.left.pod.visible = false;
-      this.right.pod.visible = false;
+      this.singleBarrel.visible = false;
+      this.singleShroud.visible = false;
+      this.singlePod.visible = true;
     }
   }
 
@@ -205,19 +249,21 @@ export class GunViewModel {
     this.muzzleFlashTimer = 0.07;
     this.lastSide = side === 0 ? -1 : side;
 
-    // Flash the fired side on the dual-unit weapons; flash BOTH for missile
+    const isTwin = this.weaponType === 'aa_gun' || this.weaponType === 'heavy_cannon';
     const isMissile = this.weaponType === 'missile';
-    const flip = (refs: UnitRefs, on: boolean) => {
-      (refs.flash.material as THREE.MeshBasicMaterial).opacity = on ? 1.0 : 0;
-      refs.flash.scale.setScalar(on ? (1.0 + Math.random() * 0.8) : 1);
-      refs.light.intensity = on ? 4.5 * intensity : 0;
-    };
-    if (isMissile) {
-      flip(this.left, true);
-      flip(this.right, true);
-    } else {
+
+    if (isTwin) {
+      const flip = (refs: UnitRefs, on: boolean) => {
+        (refs.flash.material as THREE.MeshBasicMaterial).opacity = on ? 1.0 : 0;
+        refs.flash.scale.setScalar(on ? (1.0 + Math.random() * 0.8) : 1);
+        refs.light.intensity = on ? 4.5 * intensity : 0;
+      };
       flip(this.left, this.lastSide < 0);
       flip(this.right, this.lastSide > 0);
+    } else {
+      (this.singleFlash.material as THREE.MeshBasicMaterial).opacity = 1;
+      this.singleFlash.scale.setScalar(1.0 + Math.random() * 0.8);
+      this.singleLight.intensity = 4.5 * intensity;
     }
 
     this.ejectCasing();
@@ -225,11 +271,12 @@ export class GunViewModel {
 
   private ejectCasing() {
     const mesh = new THREE.Mesh(this.casingGeo, this.casingMat);
-    mesh.position.set(this.lastSide > 0 ? 0.12 : -0.12, -0.05, 0.1);
+    const isTwin = this.weaponType === 'aa_gun' || this.weaponType === 'heavy_cannon';
+    mesh.position.set(isTwin ? this.lastSide * 0.12 : 0.08, -0.05, 0.1);
     this.group.add(mesh);
     this.casings.push({
       mesh,
-      velocity: new THREE.Vector3(this.lastSide * (0.8 + Math.random() * 0.6), 0.9 + Math.random() * 0.5, 0.3),
+      velocity: new THREE.Vector3((isTwin ? this.lastSide : 1) * (0.8 + Math.random() * 0.6), 0.9 + Math.random() * 0.5, 0.3),
       rotSpeed: new THREE.Vector3(Math.random() * 15, Math.random() * 15, Math.random() * 15),
       life: 0,
     });
@@ -243,15 +290,18 @@ export class GunViewModel {
 
     const swayX = Math.sin(this.idleTime * 1.5) * 0.004;
     const swayY = Math.cos(this.idleTime * 3.0) * 0.004;
-
-    // Left gun: recoil pushes the whole unit back along its barrel axis
     const kick = this.currentRecoil * 0.12;
-    this.left.group.position.set(-0.5 + swayX * 0.5, -0.30 + swayY + kick * 0.02, -0.7 + kick);
-    this.right.group.position.set(0.5 - swayX * 0.5, -0.30 + swayY + kick * 0.02, -0.7 + kick);
 
-    // Individual barrel kick on the fired side
+    // Twin guns: kick the fired side back
+    this.left.group.position.set(-0.72 + swayX * 0.5, -0.52 + swayY, -0.85 + kick);
+    this.right.group.position.set(0.72 - swayX * 0.5, -0.52 + swayY, -0.85 + kick);
     this.left.barrel.position.z = -this.leftBarrelLen / 2 + (this.lastSide < 0 ? kick * 1.2 : 0);
     this.right.barrel.position.z = -this.rightBarrelLen / 2 + (this.lastSide > 0 ? kick * 1.2 : 0);
+
+    // One-handed weapon recoil
+    this.single.position.set(0.28 + swayX, -0.30 + swayY + kick * 0.02, -0.6 + kick * 0.9);
+    this.single.rotation.set(0.03 - kick * 0.12, -0.1, -0.02 + kick * 0.03);
+    this.handgun.position.set(0.26 + swayX, -0.3 + swayY + kick * 0.02, -0.55 + kick * 0.9);
 
     // Muzzle flash decay
     if (this.muzzleFlashTimer > 0) {
@@ -261,6 +311,8 @@ export class GunViewModel {
         (this.right.flash.material as THREE.MeshBasicMaterial).opacity = 0;
         this.left.light.intensity = 0;
         this.right.light.intensity = 0;
+        (this.singleFlash.material as THREE.MeshBasicMaterial).opacity = 0;
+        this.singleLight.intensity = 0;
       }
     }
 
