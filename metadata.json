@@ -1,0 +1,6 @@
+{
+  "name": "Qandil Beachhead 3D: Mountain Redoubt",
+  "description": "3D mountain land defense game inspired by Beach Head. Defend a rugged Qandil mountain pass against waves of soldiers, armored tanks, attack helicopters, and airborne paratroopers with your anti-air turret.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
