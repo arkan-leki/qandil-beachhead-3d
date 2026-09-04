@@ -115,7 +115,7 @@ export class GameEngine {
   private gunView: GunViewModel;
 
   // Allied Air Support (Fighter Jet Strikes)
-  private alliedJets: { group: THREE.Group; velocity: THREE.Vector3; bombsLeft: number; lastBombTime: number }[] = [];
+  private alliedJets: { group: THREE.Group; velocity: THREE.Vector3; bombsLeft: number; lastBombTime: number; targetX: number; targetZ: number }[] = [];
 
   // Player Turret (two ZU-23 AA units + twin 105mm cannons)
   private turretBaseGroup: THREE.Group;
@@ -700,24 +700,73 @@ export class GameEngine {
 
     this.stats.airstrikesAvailable--;
     soundManager.playJetFlyby();
-    // B-58 heavy bomber: slower, longer run, delayed carpet-bombing
+
+    // Bomb whatever the camera is looking at (crosshair ground target).
+    const aimPoint = this.cameraAimGroundPoint();
+    const tx = aimPoint.x;
+    const tz = aimPoint.z;
+
+    // Horizontal aim direction (used to fly the bomber straight over the target)
+    let hx = -Math.sin(this.yaw);
+    let hz = -Math.cos(this.yaw);
+    const hLen = Math.hypot(hx, hz) || 1;
+    hx /= hLen; hz /= hLen;
+
+    // Spawn the bomber BEHIND the target along the aim direction, fly over it
+    const startDist = 140;
+    const spawnX = tx - hx * startDist;
+    const spawnZ = tz - hz * startDist;
+
     const { group: jetGroup } = createJetModel();
     jetGroup.scale.set(2.0, 2.0, 2.0);
-    jetGroup.position.set(0, 40, 240);
-    jetGroup.lookAt(0, 40, -300);
+    jetGroup.position.set(spawnX, 42, spawnZ);
+    jetGroup.lookAt(tx, 42, tz);
     this.scene.add(jetGroup);
 
     this.alliedJets.push({
       group: jetGroup,
-      velocity: new THREE.Vector3(0, -0.6, -120),
-      bombsLeft: 14,
-      // 3s delay before bombs start dropping (per blueprint)
-      lastBombTime: performance.now() + 3000,
+      velocity: new THREE.Vector3(hx * 70, -0.8, hz * 70),
+      bombsLeft: 12,
+      targetX: tx,
+      targetZ: tz,
+      // 2s delay before bombs start dropping
+      lastBombTime: performance.now() + 2000,
     });
 
     if (this.onStatsUpdate) {
       this.onStatsUpdate(this.stats);
     }
+  }
+
+  // Find the point on the terrain the camera is looking toward.
+  private cameraAimGroundPoint(): { x: number; z: number } {
+    const dir = new THREE.Vector3(
+      -Math.sin(this.yaw) * Math.cos(this.pitch),
+      Math.sin(this.pitch),
+      -Math.cos(this.yaw) * Math.cos(this.pitch)
+    ).normalize();
+    const cx = this.camera.position.x;
+    const cy = this.camera.position.y;
+    const cz = this.camera.position.z;
+
+    // March the aim ray until it drops below the terrain (or give up after 400m)
+    let t = 4;
+    const step = 2;
+    while (t < 400) {
+      const x = cx + dir.x * t;
+      const y = cy + dir.y * t;
+      const z = cz + dir.z * t;
+      if (y <= this.getHeightAt(x, z)) {
+        return { x, z };
+      }
+      t += step;
+    }
+    // Fallback: a point 90m ahead on the battlefield (aiming up at the sky)
+    const hx = -Math.sin(this.yaw);
+    const hz = -Math.cos(this.yaw);
+    const fx = cx + hx * 90;
+    const fz = cz + hz * 90;
+    return { x: fx, z: fz };
   }
 
   // Shaheen kamikaze drone: guided, detonates on the target under the crosshair.
@@ -2620,14 +2669,19 @@ export class GameEngine {
     // First-Person Gun Viewmodel animation (idle breathing, sway, recoil, casings)
     this.gunView.update(dt);
 
-    // Allied Fighter Jet Strikes
+    // Allied Fighter Jet Strikes — bombs target the camera aim point
     for (let j = this.alliedJets.length - 1; j >= 0; j--) {
       const jet = this.alliedJets[j];
       jet.group.position.addScaledVector(jet.velocity, dt);
 
-      // Drop bombs along the mountain corridor
+      // Distance of the jet from the target (horizontal)
+      const dx = jet.group.position.x - jet.targetX;
+      const dz = jet.group.position.z - jet.targetZ;
+      const distToTarget = Math.hypot(dx, dz);
+
+      // Drop bombs only while passing over the target zone (within 45m)
       const nowMs = performance.now();
-      if (jet.bombsLeft > 0 && nowMs - jet.lastBombTime > 260) {
+      if (jet.bombsLeft > 0 && distToTarget < 45 && nowMs - jet.lastBombTime > 200) {
         jet.bombsLeft--;
         jet.lastBombTime = nowMs;
 
@@ -2643,7 +2697,7 @@ export class GameEngine {
           type: 'player_cannon',
           mesh: bombMesh,
           position: { x: bombPos.x, y: bombPos.y, z: bombPos.z },
-          velocity: { x: (Math.random() - 0.5) * 4, y: -42, z: jet.velocity.z * 0.4 },
+          velocity: { x: (Math.random() - 0.5) * 6, y: -46, z: (Math.random() - 0.5) * 10 },
           damage: 360,
           splashRadius: 26.0,
           lifetime: 0,
@@ -2651,8 +2705,8 @@ export class GameEngine {
         });
       }
 
-      // Despawn once well past the battlefield
-      if (jet.group.position.z < -260) {
+      // Despawn once the jet has flown past the target zone
+      if (distToTarget > 160 || jet.bombsLeft <= 0 && distToTarget > 70) {
         this.scene.remove(jet.group);
         this.alliedJets.splice(j, 1);
       }
