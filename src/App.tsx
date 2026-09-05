@@ -8,7 +8,8 @@ import { GameEngine } from './game3d/gameEngine';
 import { GameOverlay } from './components/GameOverlay';
 import { TurretControlsHUD } from './components/TurretControlsHUD';
 import { SettingsPanel } from './components/SettingsPanel';
-import { Difficulty, GameStats, RadarBlip, WeaponState, WeaponType } from './types';
+import { Difficulty, GameStats, Language, RadarBlip, WeaponState, WeaponType } from './types';
+import { I18N } from './i18n';
 
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -139,6 +140,20 @@ export default function App() {
   const [isTouch, setIsTouch] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [supplyNotice, setSupplyNotice] = useState<{ text: string; color: 'emerald' | 'gold'; key: number } | null>(null);
+  const [lang, setLang] = useState<Language>(() => {
+    try {
+      const saved = localStorage.getItem('qb3d_lang');
+      if (saved === 'ku' || saved === 'en') return saved;
+    } catch {}
+    return 'en';
+  });
+
+  const handleSelectLanguage = (newLang: Language) => {
+    setLang(newLang);
+    try {
+      localStorage.setItem('qb3d_lang', newLang);
+    } catch {}
+  };
 
   // Fullscreen toggle
   useEffect(() => {
@@ -414,6 +429,7 @@ export default function App() {
         kamikazeReady={(stats.kamikazeCooldown ?? 0) <= 0}
         onKamikaze={handleKamikaze}
         supplyNotice={supplyNotice}
+        lang={lang}
       />
 
       {/* Overlays: Start Briefing, Wave Clear, Game Over */}
@@ -421,7 +437,9 @@ export default function App() {
         gameState={gameState}
         stats={stats}
         difficulty={difficulty}
+        lang={lang}
         onSelectDifficulty={handleSelectDifficulty}
+        onSelectLanguage={handleSelectLanguage}
         onStartGame={handleStartGame}
         onNextWave={handleNextWave}
         onRestart={handleRestart}
@@ -431,6 +449,8 @@ export default function App() {
       <SettingsPanel
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
+        lang={lang}
+        onSelectLanguage={handleSelectLanguage}
         autoFire={autoFire ? 'on' : 'off'}
         aimAssist={aimAssist}
         haptics={haptics}
@@ -461,11 +481,14 @@ export default function App() {
 
       {/* Rotate-to-landscape prompt (mobile portrait) */}
       {isTouch && isPortrait && gameState !== 'ready' && (
-        <div className="absolute inset-0 z-[60] bg-black/90 flex flex-col items-center justify-center gap-6 p-8 text-center">
-          <div className="text-6xl" style={{ animation: 'rotateHint 1.6s ease-in-out infinite' }}>📱↻</div>
-          <div className="font-mono text-xl font-bold text-amber-400 tracking-widest">ROTATE DEVICE</div>
+        <div
+          dir={lang === 'ku' ? 'rtl' : 'ltr'}
+          className="absolute inset-0 z-[60] bg-black/90 flex flex-col items-center justify-center gap-4 sm:gap-6 p-6 sm:p-8 text-center"
+        >
+          <div className="text-5xl sm:text-6xl" style={{ animation: 'rotateHint 1.6s ease-in-out infinite' }}>📱↻</div>
+          <div className="font-mono text-lg sm:text-xl font-bold text-amber-400 tracking-widest">{I18N[lang].rotateTitle}</div>
           <div className="font-mono text-xs text-zinc-400 max-w-xs leading-relaxed">
-            This battle is played in <b className="text-white">landscape</b>. Turn your phone sideways for full view and controls.
+            {I18N[lang].rotateDesc}
           </div>
         </div>
       )}

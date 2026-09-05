@@ -144,6 +144,7 @@ export interface RadarBlip {
 }
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
+export type Language = 'en' | 'ku';
 
 export interface WaveConfig {
   waveNumber: number;

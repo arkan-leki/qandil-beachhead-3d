@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Volume2, VolumeX, ZoomIn, Plane } from 'lucide-react';
-import { GameStats, RadarBlip, WeaponState, WeaponType } from '../types';
+import { GameStats, Language, RadarBlip, WeaponState, WeaponType } from '../types';
 import { RadarHUD } from './RadarHUD';
+import { I18N } from '../i18n';
 
 interface TurretControlsHUDProps {
   stats: GameStats;
@@ -14,6 +15,7 @@ interface TurretControlsHUDProps {
   isMuted: boolean;
   isNight: boolean;
   autoFire: boolean;
+  lang?: Language;
   onSwitchWeapon: (type: WeaponType) => void;
   onReload: (type: WeaponType) => void;
   onToggleZoom: () => void;
@@ -64,7 +66,9 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
   kamikazeReady,
   onKamikaze,
   supplyNotice,
+  lang = 'en',
 }) => {
+  const t = I18N[lang];
   const activeW = weapons[currentWeapon];
   const hpPercent = (stats.baseHealth / stats.maxBaseHealth) * 100;
   const isCritical = hpPercent <= 25;
@@ -142,8 +146,8 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
       {/* ---- Split-zone hints (touch only): LEFT = aim, RIGHT = gun ---- */}
       {isTouch && (
         <div className="absolute inset-x-0 bottom-40 sm:bottom-44 flex justify-between px-3 pointer-events-none">
-          <div className="font-mono text-[9px] sm:text-[10px] text-emerald-300/70 bg-black/40 px-2 py-0.5 rounded tracking-widest">◀ DRAG = AIM</div>
-          <div className="font-mono text-[9px] sm:text-[10px] text-amber-300/70 bg-black/40 px-2 py-0.5 rounded tracking-widest">TAP = GUN ▶</div>
+          <div className="font-mono text-[9px] sm:text-[10px] text-emerald-300/70 bg-black/40 px-2 py-0.5 rounded tracking-widest">{t.dragAimHint}</div>
+          <div className="font-mono text-[9px] sm:text-[10px] text-amber-300/70 bg-black/40 px-2 py-0.5 rounded tracking-widest">{t.tapGunHint}</div>
         </div>
       )}
 
@@ -153,8 +157,8 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
           <div className={`px-8 py-3 rounded-sm border text-center ${
             banner.night ? 'bg-indigo-950/80 border-indigo-500/70' : 'bg-black/75 border-amber-600/60'
           }`} style={{ animation: 'waveIn 0.4s ease-out, fadeUp 2.2s ease-in 0.4s forwards' }}>
-            <div className="font-mono text-3xl font-black tracking-widest text-amber-400">WAVE {banner.wave}</div>
-            {banner.night && <div className="font-mono text-[11px] tracking-widest text-indigo-300">NIGHT MISSION — SEARCHLIGHT ACTIVE</div>}
+            <div className="font-mono text-3xl font-black tracking-widest text-amber-400">{t.waveBannerTitle(banner.wave)}</div>
+            {banner.night && <div className="font-mono text-[11px] tracking-widest text-indigo-300">{t.nightMissionBanner}</div>}
           </div>
         </div>
       )}
@@ -169,7 +173,11 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
           }`} style={{ animation: 'waveIn 0.3s ease-out, fadeUp 2.6s ease-in 0.3s forwards' }}>
             <span className="text-xl">🪂</span>
             <div className="font-mono text-xs sm:text-sm font-black tracking-wider">
-              {supplyNotice.text}
+              {supplyNotice.text.includes('AIRDROP')
+                ? t.airdropInboundNotice
+                : supplyNotice.text.includes('MUNITIONS') || supplyNotice.text.includes('REPAIRS')
+                ? t.munitionsReceivedNotice
+                : supplyNotice.text}
             </div>
           </div>
         </div>
@@ -182,17 +190,17 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
           <div className="flex items-stretch gap-1.5 pointer-events-auto">
             {/* Score */}
             <div className="bg-black/60 backdrop-blur-[2px] border border-zinc-700/50 rounded px-2.5 py-1 text-right">
-              <div className="text-[8px] font-mono text-zinc-500 tracking-[0.2em]">SCORE</div>
+              <div className="text-[8px] font-mono text-zinc-500 tracking-[0.2em]">{t.score}</div>
               <div className="font-mono text-lg sm:text-xl font-bold text-amber-400 leading-none">{stats.score.toLocaleString()}</div>
             </div>
             {/* Wave */}
             <div className="bg-black/60 backdrop-blur-[2px] border border-zinc-700/50 rounded px-2 py-1 text-center">
-              <div className="text-[8px] font-mono text-zinc-500 tracking-[0.2em]">WAVE</div>
+              <div className="text-[8px] font-mono text-zinc-500 tracking-[0.2em]">{t.wave}</div>
               <div className="font-mono text-lg sm:text-xl font-bold text-emerald-400 leading-none">{stats.wave}</div>
             </div>
             {/* Echelon */}
             <div className="bg-black/60 backdrop-blur-[2px] border border-zinc-700/50 rounded px-2 py-1 text-center">
-              <div className="text-[8px] font-mono text-zinc-500 tracking-[0.2em]">ECH</div>
+              <div className="text-[8px] font-mono text-zinc-500 tracking-[0.2em]">{t.ech}</div>
               <div className="font-mono text-lg sm:text-xl font-bold text-cyan-400 leading-none">{stats.currentEchelon ?? 1}</div>
             </div>
           </div>
@@ -205,7 +213,7 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
 
           {/* 360° compass + enemy radar (bottom-left corner) */}
           <div className="scale-75 sm:scale-90 origin-top-left">
-            <RadarHUD blips={radarBlips} headingDeg={headingDeg} pitchDeg={pitchDeg} />
+            <RadarHUD blips={radarBlips} headingDeg={headingDeg} pitchDeg={pitchDeg} lang={lang} />
           </div>
         </div>
 
@@ -218,7 +226,7 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
               className={`w-9 h-9 rounded flex items-center justify-center border text-xs ${
                 airstrikesAvailable > 0 ? 'bg-red-950/80 border-red-500/70 text-red-300 animate-pulse' : 'bg-zinc-900/60 border-zinc-800 text-zinc-600'
               }`}
-              title={`Airstrike (B) — ${airstrikesAvailable} left`}
+              title={t.airstrikeTitle(airstrikesAvailable)}
             >
               <Plane className="w-4 h-4" />
             </button>
@@ -228,7 +236,7 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
               className={`w-9 h-9 rounded flex items-center justify-center border text-xs ${
                 kamikazeReady ? 'bg-orange-950/80 border-orange-500/80 text-orange-300 animate-pulse' : 'bg-zinc-900/60 border-zinc-800 text-zinc-600'
               }`}
-              title="Shaheen Kamikaze Drone (ready every 60s)"
+              title={t.kamikazeTitle}
             >
               🚁
             </button>
@@ -236,7 +244,7 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
               <button
                 onClick={onFlare}
                 className="w-9 h-9 rounded flex items-center justify-center border border-indigo-500/70 bg-indigo-950/80 text-lg"
-                title="Flare (F)"
+                title={t.flareTitle}
               >
                 💡
               </button>
@@ -244,35 +252,35 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
             <button
               onClick={onToggleZoom}
               className="w-9 h-9 rounded flex items-center justify-center border border-zinc-700 bg-black/60 text-zinc-200"
-              title={`Zoom (${zoomLevel}x)`}
+              title={t.zoomTitle(zoomLevel)}
             >
               <ZoomIn className="w-4 h-4" />
             </button>
             <button
               onClick={onToggleMute}
               className="w-9 h-9 rounded flex items-center justify-center border border-zinc-700 bg-black/60"
-              title="Mute"
+              title={isMuted ? t.unmuteTitle : t.muteTitle}
             >
               {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
             </button>
             <button
               onClick={onFullscreen}
               className="w-9 h-9 rounded flex items-center justify-center border border-zinc-700 bg-black/60 text-zinc-200"
-              title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+              title={isFullscreen ? t.exitFullscreenTitle : t.fullscreenTitle}
             >
               {isFullscreen ? '🡼' : '⛶'}
             </button>
             <button
               onClick={onSettings}
               className="w-9 h-9 rounded flex items-center justify-center border border-zinc-700 bg-black/60 text-lg"
-              title="Settings"
+              title={t.settingsTitle}
             >
               ⚙️
             </button>
           </div>
           {autoFire && (
             <div className="bg-emerald-950/80 border border-emerald-600/70 rounded px-1.5 py-0.5 font-mono text-[9px] text-emerald-300 font-bold tracking-widest pointer-events-none">
-              AUTO-FIRE
+              {t.autoFire}
             </div>
           )}
         </div>
@@ -290,7 +298,7 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
           <div className="absolute -bottom-1.5 -left-1.5 w-2.5 h-2.5 border-b-2 border-l-2 border-amber-400/60"></div>
           <div className="absolute -bottom-1.5 -right-1.5 w-2.5 h-2.5 border-b-2 border-r-2 border-amber-400/60"></div>
           <div className="absolute bottom-0.5 right-1.5 text-[9px] font-mono text-amber-300 font-bold">
-            {WEAPON_LIST.find((w) => w.type === currentWeapon)?.short}
+            {t.weaponNames[currentWeapon]?.short || WEAPON_LIST.find((w) => w.type === currentWeapon)?.short}
           </div>
         </div>
       </div>
@@ -316,9 +324,11 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
         <div className="flex flex-col items-center gap-1">
           <div className="flex items-center gap-2 bg-black/70 border border-zinc-700/60 rounded px-2 py-0.5 font-mono text-[10px] text-zinc-300">
             <span className="text-amber-400 font-bold">{WEAPON_LIST.find((w) => w.type === currentWeapon)?.icon}</span>
-            <span className="font-bold text-white tracking-wider">{WEAPON_LIST.find((w) => w.type === currentWeapon)?.short}</span>
+            <span className="font-bold text-white tracking-wider">
+              {t.weaponNames[currentWeapon]?.short || WEAPON_LIST.find((w) => w.type === currentWeapon)?.short}
+            </span>
             <span className="text-zinc-400">
-              {activeW.reloading ? 'RELOADING' : activeW.unlimited && currentWeapon !== 'handgun' ? 'INF' : `${activeW.ammo}`}
+              {activeW.reloading ? t.reloading : activeW.unlimited && currentWeapon !== 'handgun' ? t.inf : `${activeW.ammo}`}
             </span>
             {currentWeapon === 'm60' && (
               <span className="flex items-center gap-1">
@@ -330,9 +340,9 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
                 </span>
               </span>
             )}
-            {(activeW.overheated) && <span className="text-red-400 font-bold animate-pulse">OVERHEAT!</span>}
+            {(activeW.overheated) && <span className="text-red-400 font-bold animate-pulse">{t.overheat}</span>}
             {activeW.reloading ? null : (
-              <button onClick={() => onReload(currentWeapon)} className="text-zinc-400 hover:text-white px-1" title="Reload (R)">↻</button>
+              <button onClick={() => onReload(currentWeapon)} className="text-zinc-400 hover:text-white px-1 cursor-pointer" title={t.reloading}>↻</button>
             )}
           </div>
 
@@ -343,17 +353,17 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
             onPointerUp={(e) => closeWheel(e)}
             onPointerLeave={() => closeWheel()}
             onPointerCancel={() => closeWheel()}
-            className="pointer-events-auto relative w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-zinc-900/85 border-2 border-amber-500/80 shadow-xl flex items-center justify-center text-white active:scale-95 transition-transform font-mono font-bold text-[10px]"
-            title="Hold to switch weapon (1-5 on keyboard)"
+            className="pointer-events-auto relative w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-zinc-900/85 border-2 border-amber-500/80 shadow-xl flex items-center justify-center text-white active:scale-95 transition-transform font-mono font-bold text-[10px] cursor-pointer"
+            title={lang === 'ku' ? 'ڕاگرە بۆ هەڵبژاردنی چەک (١-٥ لە کیبۆرد)' : 'Hold to switch weapon (1-5 on keyboard)'}
           >
             <div className="flex flex-col items-center leading-none gap-0.5">
               <span className="text-2xl">🔫</span>
-              <span>GUNS</span>
+              <span>{t.guns}</span>
             </div>
             <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-amber-400 animate-pulse"></span>
           </button>
           <div className="font-mono text-[8px] text-zinc-500 tracking-widest pointer-events-none">
-            TAP FIRE · HOLD GUNS
+            {t.tapFireHoldGuns}
           </div>
         </div>
 
@@ -364,10 +374,10 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
             onPointerUp={onFireEnd}
             onPointerLeave={onFireEnd}
             onPointerCancel={onFireEnd}
-            className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-linear-to-b from-red-600 to-red-800 border-4 border-amber-500/80 shadow-2xl flex flex-col items-center justify-center text-white active:scale-95 transition-transform"
+            className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-linear-to-b from-red-600 to-red-800 border-4 border-amber-500/80 shadow-2xl flex flex-col items-center justify-center text-white active:scale-95 transition-transform cursor-pointer"
           >
             <span className="text-lg leading-none mb-0.5">🔥</span>
-            <span className="text-[9px] font-bold font-mono tracking-wider">FIRE</span>
+            <span className="text-[9px] font-bold font-mono tracking-wider">{t.fire}</span>
           </button>
         </div>
       </div>
@@ -396,15 +406,15 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
                   style={{ left: x, top: y }}
                 >
                   <span className="text-xl leading-none">{w.icon}</span>
-                  <span className="font-mono text-[9px] font-bold">{w.short}</span>
+                  <span className="font-mono text-[9px] font-bold">{t.weaponNames[w.type]?.short || w.short}</span>
                   <span className="font-mono text-[8px] opacity-80">
-                    {weapons[w.type].unlimited && w.type !== 'handgun' ? 'INF' : weapons[w.type].ammo}
+                    {weapons[w.type].unlimited && w.type !== 'handgun' ? t.inf : weapons[w.type].ammo}
                   </span>
                 </div>
               );
             })}
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-zinc-900 border-2 border-amber-400 flex items-center justify-center font-mono text-[8px] text-amber-300 text-center leading-tight">
-              HOLD<br />RELEASE
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-zinc-900 border-2 border-amber-400 flex items-center justify-center font-mono text-[8px] text-amber-300 text-center leading-tight whitespace-pre-line">
+              {t.wheelHoldRelease}
             </div>
           </div>
         </div>

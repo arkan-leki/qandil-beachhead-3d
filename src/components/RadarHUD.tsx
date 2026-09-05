@@ -1,10 +1,11 @@
 import React from 'react';
-import { RadarBlip } from '../types';
+import { Language, RadarBlip } from '../types';
 
 interface RadarHUDProps {
   blips: RadarBlip[];
   headingDeg: number;
   pitchDeg?: number;
+  lang?: Language;
 }
 
 const getCardinal = (deg: number): string => {
@@ -13,7 +14,7 @@ const getCardinal = (deg: number): string => {
   return dirs[index];
 };
 
-export const RadarHUD: React.FC<RadarHUDProps> = ({ blips, headingDeg, pitchDeg }) => {
+export const RadarHUD: React.FC<RadarHUDProps> = ({ blips, headingDeg, pitchDeg, lang = 'en' }) => {
   const size = 152;
   const cx = size / 2; // 76
   const cy = size / 2; // 76
@@ -327,9 +328,13 @@ export const RadarHUD: React.FC<RadarHUDProps> = ({ blips, headingDeg, pitchDeg 
       <div className="flex items-center justify-between w-[152px] px-1 pt-1 text-[8px] font-mono text-zinc-400">
         <span className="flex items-center gap-1">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
-          <span className="text-emerald-400 font-bold">{inViewCount} IN VIEW</span>
+          <span className="text-emerald-400 font-bold">
+            {inViewCount} {lang === 'ku' ? 'لە بەرچاو' : 'IN VIEW'}
+          </span>
         </span>
-        <span className="text-zinc-500 font-bold">{blips.length} TGT [200M]</span>
+        <span className="text-zinc-500 font-bold">
+          {blips.length} {lang === 'ku' ? 'ئامانج' : 'TGT'} [200M]
+        </span>
       </div>
     </div>
   );

@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+body {
+  font-family: 'Share Tech Mono', 'Noto Sans Arabic', Tahoma, system-ui, sans-serif;
+}
+
+[dir="rtl"] {
+  font-family: 'Noto Sans Arabic', Tahoma, 'Share Tech Mono', system-ui, sans-serif;
+}
+
 /* Wave banner entrance + fade */
 @keyframes waveIn {
   from { transform: scale(1.6); opacity: 0; }
@@ -17,4 +25,8 @@
 @keyframes radarPulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
+}
+@keyframes radarBeam {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
