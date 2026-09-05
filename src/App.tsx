@@ -21,7 +21,7 @@ export default function App() {
     highScore: 0,
     wave: 1,
     difficulty: 'medium',
-    kills: { soldiers: 0, tanks: 0, apcs: 0, helicopters: 0, paratroopers: 0 },
+    kills: { soldiers: 0, tanks: 0, apcs: 0, helicopters: 0, paratroopers: 0, jets: 0, transportPlanes: 0 },
     shotsFired: 0,
     shotsHit: 0,
     baseHealth: 100,
@@ -248,7 +248,7 @@ export default function App() {
         highScore: Math.max(GameEngine.loadHighScore(), stats.score, stats.highScore),
         wave: 1,
         difficulty,
-        kills: { soldiers: 0, tanks: 0, apcs: 0, helicopters: 0, paratroopers: 0 },
+        kills: { soldiers: 0, tanks: 0, apcs: 0, helicopters: 0, paratroopers: 0, jets: 0, transportPlanes: 0 },
         shotsFired: 0,
         shotsHit: 0,
         baseHealth: 100,
@@ -266,7 +266,7 @@ export default function App() {
         eng.weapons[k].reloading = false;
         eng.weapons[k].lastFired = 0;
       });
-      eng.currentWeapon = 'm60';
+      eng.switchWeapon('m60', true);
       eng.onWeaponUpdate && eng.onWeaponUpdate(eng.weapons, 'm60');
       setCurrentWeapon('m60');
       eng.startWave(1);

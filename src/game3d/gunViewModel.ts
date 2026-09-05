@@ -31,8 +31,7 @@ export class GunViewModel {
 
   // One-handed weapon (M60 / rocket / handgun)
   private single = new THREE.Group();
-  private singleBarrel = new THREE.Mesh();
-  private singleShroud = new THREE.Group();
+  private singleM60 = new THREE.Group();
   private singlePod = new THREE.Group();
   private handgun = new THREE.Group();
   private singleFlash = new THREE.Mesh();
@@ -44,7 +43,7 @@ export class GunViewModel {
   private muzzleFlashTimer: number = 0;
   private idleTime: number = 0;
   private lastSide: number = -1;
-  private weaponType: WeaponType = 'aa_gun';
+  private weaponType: WeaponType = 'm60';
 
   private casings: { mesh: THREE.Mesh; velocity: THREE.Vector3; rotSpeed: THREE.Vector3; life: number }[] = [];
   private casingGeo: THREE.CylinderGeometry;
@@ -121,40 +120,91 @@ export class GunViewModel {
     this.single.position.set(0.28, -0.30, -0.6); // held bottom-right
     this.single.rotation.set(0.03, -0.1, -0.02);
 
+    // M60 General Purpose Machine Gun Assembly
+    this.singleM60 = new THREE.Group();
+
+    // Receiver block
     const sBase = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.16, 0.55), gunSteelMat);
     sBase.position.set(0, 0, 0);
-    this.single.add(sBase);
+    this.singleM60.add(sBase);
 
+    // Top receiver feed cover
     const sTop = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.05, 0.42), highlightMat);
     sTop.position.set(0, 0.09, -0.04);
-    this.single.add(sTop);
+    this.singleM60.add(sTop);
 
+    // 100-round Olive Drab assault ammo box mounted to left of receiver
+    const odGreenMat = new THREE.MeshStandardMaterial({ color: 0x3b4736, roughness: 0.55, metalness: 0.25 });
+    const ammoBox = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, 0.20), odGreenMat);
+    ammoBox.position.set(-0.13, -0.02, -0.04);
+    this.singleM60.add(ammoBox);
+
+    // Visible brass linked 7.62mm ammunition entering the feed tray
+    const ammoBeltGeo = new THREE.BoxGeometry(0.06, 0.035, 0.09);
+    const ammoBelt = new THREE.Mesh(ammoBeltGeo, brassMat);
+    ammoBelt.position.set(-0.07, 0.045, -0.04);
+    this.singleM60.add(ammoBelt);
+
+    // Barrel
     const sBarrelGeo = new THREE.CylinderGeometry(0.026, 0.028, 1.15, 12);
     sBarrelGeo.rotateX(Math.PI / 2);
-    this.singleBarrel = new THREE.Mesh(sBarrelGeo, gunSteelMat);
-    this.singleBarrel.position.set(0, 0.01, -0.27 - 0.575);
-    this.single.add(this.singleBarrel);
+    const m60Barrel = new THREE.Mesh(sBarrelGeo, gunSteelMat);
+    m60Barrel.position.set(0, 0.01, -0.27 - 0.575);
+    this.singleM60.add(m60Barrel);
 
-    // shroud
-    this.singleShroud = new THREE.Group();
+    // Perforated heat shroud
+    const m60Shroud = new THREE.Group();
     const shroudGeo = new THREE.CylinderGeometry(0.046, 0.046, 0.65, 12, 1, true);
     shroudGeo.rotateX(Math.PI / 2);
     const shroudMesh = new THREE.Mesh(shroudGeo, darkTrimMat);
     shroudMesh.position.set(0, 0.01, -0.62);
-    this.singleShroud.add(shroudMesh);
+    m60Shroud.add(shroudMesh);
     const ringGeo = new THREE.TorusGeometry(0.048, 0.007, 8, 16);
     for (let i = 0; i < 14; i++) {
       const ring = new THREE.Mesh(ringGeo, highlightMat);
       ring.position.set(0, 0.01, -0.32 - i * 0.042);
-      this.singleShroud.add(ring);
+      m60Shroud.add(ring);
     }
-    this.single.add(this.singleShroud);
+    this.singleM60.add(m60Shroud);
 
-    // muzzle brake
+    // Characteristic top carry handle
+    const carryHandle = new THREE.Group();
+    const handleBar = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.16, 8), darkTrimMat);
+    handleBar.rotation.x = Math.PI / 2;
+    handleBar.position.set(0.04, 0.15, -0.24);
+    const handlePostF = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.07, 6), gunSteelMat);
+    handlePostF.position.set(0.04, 0.115, -0.17);
+    const handlePostR = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.07, 6), gunSteelMat);
+    handlePostR.position.set(0.04, 0.115, -0.31);
+    carryHandle.add(handleBar, handlePostF, handlePostR);
+    this.singleM60.add(carryHandle);
+
+    // Front iron sight post
+    const sightPost = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.045, 0.02), gunSteelMat);
+    sightPost.position.set(0, 0.052, -1.36);
+    this.singleM60.add(sightPost);
+
+    // Gas cylinder beneath barrel & folded bipod legs
+    const gasCyl = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.65, 8), darkTrimMat);
+    gasCyl.geometry.rotateX(Math.PI / 2);
+    gasCyl.position.set(0, -0.032, -0.80);
+    this.singleM60.add(gasCyl);
+
+    const bipodL = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.42, 6), darkTrimMat);
+    bipodL.position.set(-0.035, -0.04, -0.92);
+    bipodL.rotation.x = Math.PI / 2;
+    const bipodR = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.42, 6), darkTrimMat);
+    bipodR.position.set(0.035, -0.04, -0.92);
+    bipodR.rotation.x = Math.PI / 2;
+    this.singleM60.add(bipodL, bipodR);
+
+    // Muzzle brake
     const sBrake = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.04, 0.12, 10), darkTrimMat);
     sBrake.geometry.rotateX(Math.PI / 2);
     sBrake.position.set(0, 0.01, -1.42);
-    this.single.add(sBrake);
+    this.singleM60.add(sBrake);
+
+    this.single.add(this.singleM60);
 
     // single muzzle flash
     const sFlashMat = new THREE.MeshBasicMaterial({ color: 0xffe066, transparent: true, opacity: 0 });
@@ -206,7 +256,7 @@ export class GunViewModel {
     this.casingGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.045, 6);
     this.casingMat = brassMat;
 
-    this.setWeapon('aa_gun');
+    this.setWeapon('m60');
   }
 
   private shapeBarrel(refs: UnitRefs, ref: 'left' | 'right', radius: number, length: number) {
@@ -234,12 +284,10 @@ export class GunViewModel {
       this.left.pod.visible = false;
       this.right.pod.visible = false;
     } else if (type === 'm60') {
-      this.singleBarrel.visible = true;
-      this.singleShroud.visible = true;
+      this.singleM60.visible = true;
       this.singlePod.visible = false;
     } else if (type === 'missile') {
-      this.singleBarrel.visible = false;
-      this.singleShroud.visible = false;
+      this.singleM60.visible = false;
       this.singlePod.visible = true;
     }
   }

@@ -295,7 +295,7 @@ export class GameEngine {
     highScore: 0,
     wave: 1,
     difficulty: 'medium',
-    kills: { soldiers: 0, tanks: 0, apcs: 0, helicopters: 0, paratroopers: 0 },
+    kills: { soldiers: 0, tanks: 0, apcs: 0, helicopters: 0, paratroopers: 0, jets: 0, transportPlanes: 0 },
     shotsFired: 0,
     shotsHit: 0,
     baseHealth: 100,
@@ -308,6 +308,18 @@ export class GameEngine {
     totalEchelons: 3,
     activeThreats: 0,
   };
+
+  // Shared projectile assets (cached to prevent thousands of GPU allocations per minute)
+  private static playerBulletGeo: THREE.CylinderGeometry | null = null;
+  private static playerBulletMat: THREE.MeshBasicMaterial | null = null;
+  private static playerCannonGeo: THREE.CylinderGeometry | null = null;
+  private static playerCannonMat: THREE.MeshBasicMaterial | null = null;
+  private static playerMissileGeo: THREE.ConeGeometry | null = null;
+  private static playerMissileMat: THREE.MeshStandardMaterial | null = null;
+  private static enemyBulletGeo: THREE.SphereGeometry | null = null;
+  private static enemyBulletMat: THREE.MeshBasicMaterial | null = null;
+  private static enemyShellGeo: THREE.SphereGeometry | null = null;
+  private static enemyShellMat: THREE.MeshBasicMaterial | null = null;
 
   private static readonly HIGH_SCORE_KEY = 'beachhead-highscore-v1';
   public static loadHighScore(): number {
@@ -427,6 +439,7 @@ export class GameEngine {
 
     // 6b. First-Person Viewmodel Gun (Beach Head Bunker Weapon - Mounted to camera)
     this.gunView = new GunViewModel();
+    this.gunView.setWeapon(this.currentWeapon);
     this.camera.add(this.gunView.group);
     this.scene.add(this.camera);
 
@@ -455,6 +468,19 @@ export class GameEngine {
       size: 8, map: smokeSprite, vertexColors: true, transparent: true,
       depthWrite: false, blending: THREE.NormalBlending, sizeAttenuation: true, opacity: 0.5,
     });
+
+    // PointsMaterial defaults to a uniform 'size'. Inject 'attribute float size'
+    // into the vertex shader so each particle's size BufferAttribute is rendered.
+    const enablePointSizeAttribute = (mat: THREE.PointsMaterial) => {
+      mat.onBeforeCompile = (shader) => {
+        shader.vertexShader = shader.vertexShader.replace(
+          'uniform float size;',
+          'attribute float size;'
+        );
+      };
+    };
+    enablePointSizeAttribute(this.glowMat);
+    enablePointSizeAttribute(this.smokeMat);
     this.glowPoints = new THREE.Points(this.glowGeo, this.glowMat);
     this.glowPoints.frustumCulled = false;
     this.scene.add(this.glowPoints);
@@ -548,6 +574,20 @@ export class GameEngine {
       }
     }, { passive: false });
 
+    // Pointer lock synchronization for desktop mouse aim
+    document.addEventListener('pointerlockchange', () => {
+      this.isPointerLocked = document.pointerLockElement === el;
+    });
+
+    // On desktop, clicking the viewport enters pointer lock for precision aim
+    el.addEventListener('click', () => {
+      if (!('ontouchstart' in window) && navigator.maxTouchPoints === 0 && document.pointerLockElement !== el) {
+        try {
+          el.requestPointerLock?.();
+        } catch { /* ignored */ }
+      }
+    });
+
     // Keyboard Shortcuts
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Digit1') this.switchWeapon('m60');
@@ -560,9 +600,11 @@ export class GameEngine {
       if (e.code === 'KeyR') this.reloadWeapon(this.currentWeapon);
       if (e.code === 'KeyZ' || e.code === 'ShiftLeft') this.toggleZoom();
       if (e.code === 'Space') this.isFiring = true;
-      // DEV: skip to next wave (]) / toggle night ([)
-      if (e.code === 'BracketRight') this.skipToNextWave();
-      if (e.code === 'BracketLeft') this.setNight(!this.isNight);
+      // DEV ONLY: wave skipping & night toggling only active in dev mode
+      if (import.meta.env.DEV) {
+        if (e.code === 'BracketRight') this.skipToNextWave();
+        if (e.code === 'BracketLeft') this.setNight(!this.isNight);
+      }
     });
 
     window.addEventListener('keyup', (e) => {
@@ -662,8 +704,8 @@ export class GameEngine {
     this.camera.updateProjectionMatrix();
   }
 
-  public switchWeapon(type: WeaponType) {
-    if (this.currentWeapon === type) return;
+  public switchWeapon(type: WeaponType, force: boolean = false) {
+    if (this.currentWeapon === type && !force) return;
     this.currentWeapon = type;
     this.gunView.setWeapon(type);
     soundManager.playReload();
@@ -1017,10 +1059,14 @@ export class GameEngine {
 
     for (const e of this.enemies) {
       if (e.dead) continue;
-      const toEnemy = new THREE.Vector3(e.position.x, e.position.y, e.position.z).normalize();
+      const toEnemy = new THREE.Vector3(
+        e.position.x - this.camera.position.x,
+        e.position.y - this.camera.position.y,
+        e.position.z - this.camera.position.z
+      ).normalize();
       const dot = aimDir.dot(toEnemy);
       if (dot > 0.88) { // within target acquisition cone
-        const dist = Math.hypot(e.position.x, e.position.y, e.position.z);
+        const dist = this.camera.position.distanceTo(new THREE.Vector3(e.position.x, e.position.y, e.position.z));
         if (dist < closestDist) {
           closestDist = dist;
           bestTarget = e;
@@ -1028,6 +1074,33 @@ export class GameEngine {
       }
     }
     return bestTarget;
+  }
+
+  private getPlayerBulletMesh(): THREE.Mesh {
+    if (!GameEngine.playerBulletGeo) {
+      GameEngine.playerBulletGeo = new THREE.CylinderGeometry(0.06, 0.06, 1.2, 6);
+      GameEngine.playerBulletGeo.rotateX(Math.PI / 2);
+      GameEngine.playerBulletMat = new THREE.MeshBasicMaterial({ color: 0xfff0aa });
+    }
+    return new THREE.Mesh(GameEngine.playerBulletGeo, GameEngine.playerBulletMat!);
+  }
+
+  private getPlayerCannonMesh(): THREE.Mesh {
+    if (!GameEngine.playerCannonGeo) {
+      GameEngine.playerCannonGeo = new THREE.CylinderGeometry(0.18, 0.18, 1.8, 8);
+      GameEngine.playerCannonGeo.rotateX(Math.PI / 2);
+      GameEngine.playerCannonMat = new THREE.MeshBasicMaterial({ color: 0xff9922 });
+    }
+    return new THREE.Mesh(GameEngine.playerCannonGeo, GameEngine.playerCannonMat!);
+  }
+
+  private getPlayerMissileMesh(): THREE.Mesh {
+    if (!GameEngine.playerMissileGeo) {
+      GameEngine.playerMissileGeo = new THREE.ConeGeometry(0.25, 1.8, 8);
+      GameEngine.playerMissileGeo.rotateX(Math.PI / 2);
+      GameEngine.playerMissileMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.8, roughness: 0.3 });
+    }
+    return new THREE.Mesh(GameEngine.playerMissileGeo, GameEngine.playerMissileMat!);
   }
 
   private spawnPlayerProjectile(
@@ -1041,21 +1114,11 @@ export class GameEngine {
   ) {
     let mesh: THREE.Mesh;
     if (type === 'player_bullet') {
-      const geo = new THREE.CylinderGeometry(0.06, 0.06, 1.2, 6);
-      geo.rotateX(Math.PI / 2);
-      const mat = new THREE.MeshBasicMaterial({ color: 0xfff0aa });
-      mesh = new THREE.Mesh(geo, mat);
+      mesh = this.getPlayerBulletMesh();
     } else if (type === 'player_cannon') {
-      const geo = new THREE.CylinderGeometry(0.18, 0.18, 1.8, 8);
-      geo.rotateX(Math.PI / 2);
-      const mat = new THREE.MeshBasicMaterial({ color: 0xff9922 });
-      mesh = new THREE.Mesh(geo, mat);
+      mesh = this.getPlayerCannonMesh();
     } else {
-      // Missile
-      const geo = new THREE.ConeGeometry(0.25, 1.8, 8);
-      geo.rotateX(Math.PI / 2);
-      const mat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.8, roughness: 0.3 });
-      mesh = new THREE.Mesh(geo, mat);
+      mesh = this.getPlayerMissileMesh();
     }
 
     mesh.position.copy(origin);
@@ -1206,8 +1269,8 @@ export class GameEngine {
     this.gameState = 'playing';
     this.stats.wave = waveNum;
     this.stats.difficulty = this.difficulty;
-    // Night missions begin at wave 3 so players see the day/night change early.
-    this.setNight(waveNum >= 3);
+    // Night missions begin at wave 10 (as documented in PLAN.md)
+    this.setNight(waveNum >= 10);
 
     const diff = DIFFICULTY_SETTINGS[this.difficulty];
 
@@ -1360,6 +1423,8 @@ export class GameEngine {
         fireCooldown: (3.0 + Math.random() * 2.5) * diff.fireCooldownMult,
         lastFireTime: performance.now(),
         runCycleOffset: Math.random() * 10,
+        leftLeg,
+        rightLeg,
         turretMesh: leftLeg,
         cannonMesh: rightLeg,
         proneTimer: 0,
@@ -1396,6 +1461,7 @@ export class GameEngine {
         cannonMesh: cannon,
         wheels,
         dropsLeft: 5 + Math.floor(this.stats.wave / 3), // APC troop package (5-8 troops)
+        stopDist: 50 + Math.random() * 10,
       });
 
     } else if (type === 'tank') {
@@ -1423,6 +1489,7 @@ export class GameEngine {
         lastFireTime: performance.now(),
         turretMesh: turret,
         cannonMesh: cannon,
+        stopDist: 60 + Math.random() * 35,
       });
 
     } else if (type === 'helicopter') {
@@ -1527,8 +1594,8 @@ export class GameEngine {
       const { group } = createTransportPlaneModel();
       const planeAngle = Math.random() * Math.PI * 2;
       const planeDist = 200 + Math.random() * 40;
-      const spawnX = Math.sin(planeAngle) * planeDist;
-      const spawnZ = Math.cos(planeAngle) * planeDist;
+      spawnX = Math.sin(planeAngle) * planeDist;
+      spawnZ = Math.cos(planeAngle) * planeDist;
       const planeAlt = 70 + Math.random() * 15;
       group.position.set(spawnX, planeAlt, spawnZ);
       group.lookAt(0, planeAlt, 0);
@@ -1674,9 +1741,11 @@ export class GameEngine {
             e.position.y = this.getHeightAt(e.position.x, e.position.z);
             // Leg running animation
             e.runCycleOffset = (e.runCycleOffset || 0) + dt * 10;
-            if (e.turretMesh && e.cannonMesh) {
-              e.turretMesh.rotation.x = Math.sin(e.runCycleOffset) * 0.7;
-              e.cannonMesh.rotation.x = -Math.sin(e.runCycleOffset) * 0.7;
+            const legL = e.leftLeg || e.turretMesh;
+            const legR = e.rightLeg || e.cannonMesh;
+            if (legL && legR) {
+              legL.rotation.x = Math.sin(e.runCycleOffset) * 0.7;
+              legR.rotation.x = -Math.sin(e.runCycleOffset) * 0.7;
             }
             e.meshGroup.position.set(e.position.x, e.position.y + 0.18, e.position.z);
             e.meshGroup.lookAt(0, e.position.y + 1.0, 0);
@@ -1717,7 +1786,7 @@ export class GameEngine {
         // Tank rolling down the battlefield plain — halts in the far zone and shells the bunker
         const toPlayer = new THREE.Vector3(-e.position.x, 0, -e.position.z);
         const dist = toPlayer.length();
-        const tankStopDist = 60 + Math.random() * 35;
+        const tankStopDist = e.stopDist || 75;
 
         if (dist > tankStopDist) {
           toPlayer.normalize();
@@ -1725,8 +1794,8 @@ export class GameEngine {
           e.position.z += toPlayer.z * e.speed * dt;
           e.position.y = this.getHeightAt(e.position.x, e.position.z);
 
-          // Kick up dust
-          if (Math.random() < 0.35) {
+          // Kick up dust (framerate-independent probability)
+          if (Math.random() < 20 * dt) {
             this.particles.push({
               x: e.position.x + (Math.random() - 0.5) * 3,
               y: e.position.y + 0.4,
@@ -1756,8 +1825,9 @@ export class GameEngine {
         // 8-Wheeled Armored Personnel Carrier advancing down plain
         const toPlayer = new THREE.Vector3(-e.position.x, 0, -e.position.z);
         const dist = toPlayer.length();
+        const apcStopDist = e.stopDist || 55;
 
-        if (dist > 55) {
+        if (dist > apcStopDist) {
           toPlayer.normalize();
           e.position.x += toPlayer.x * e.speed * dt;
           e.position.z += toPlayer.z * e.speed * dt;
@@ -1770,7 +1840,7 @@ export class GameEngine {
             }
           }
 
-          if (Math.random() < 0.3) {
+          if (Math.random() < 18 * dt) {
             this.particles.push({
               x: e.position.x + (Math.random() - 0.5) * 2.5,
               y: e.position.y + 0.3,
@@ -1817,6 +1887,8 @@ export class GameEngine {
             stateTimer: 0,
             fireCooldown: 2.8 * diff.fireCooldownMult,
             lastFireTime: performance.now(),
+            leftLeg,
+            rightLeg,
             turretMesh: leftLeg,
             cannonMesh: rightLeg,
             proneTimer: 0,
@@ -1870,8 +1942,8 @@ export class GameEngine {
           e.meshGroup.position.set(e.position.x, e.position.y, e.position.z);
           e.meshGroup.lookAt(0, 7.0, 0);
 
-          // Drop paratroopers occasionally (attack phase only)
-          if (e.dropsLeft && e.dropsLeft > 0 && Math.random() < 0.005) {
+          // Drop paratroopers occasionally (attack phase only, framerate-independent)
+          if (e.dropsLeft && e.dropsLeft > 0 && Math.random() < 0.3 * dt) {
             e.dropsLeft--;
             this.spawnEnemy('paratrooper');
           }
@@ -2099,6 +2171,22 @@ export class GameEngine {
     });
   }
 
+  private getEnemyBulletMesh(): THREE.Mesh {
+    if (!GameEngine.enemyBulletGeo) {
+      GameEngine.enemyBulletGeo = new THREE.SphereGeometry(0.12, 6, 6);
+      GameEngine.enemyBulletMat = new THREE.MeshBasicMaterial({ color: 0xff3322 });
+    }
+    return new THREE.Mesh(GameEngine.enemyBulletGeo, GameEngine.enemyBulletMat!);
+  }
+
+  private getEnemyShellMesh(): THREE.Mesh {
+    if (!GameEngine.enemyShellGeo) {
+      GameEngine.enemyShellGeo = new THREE.SphereGeometry(0.35, 8, 8);
+      GameEngine.enemyShellMat = new THREE.MeshBasicMaterial({ color: 0xffaa22 });
+    }
+    return new THREE.Mesh(GameEngine.enemyShellGeo, GameEngine.enemyShellMat!);
+  }
+
   private spawnEnemyProjectile(
     type: 'enemy_bullet' | 'enemy_shell' | 'enemy_rocket',
     origin: THREE.Vector3,
@@ -2108,13 +2196,9 @@ export class GameEngine {
   ) {
     let mesh: THREE.Mesh;
     if (type === 'enemy_bullet') {
-      const geo = new THREE.SphereGeometry(0.12, 6, 6);
-      const mat = new THREE.MeshBasicMaterial({ color: 0xff3322 });
-      mesh = new THREE.Mesh(geo, mat);
+      mesh = this.getEnemyBulletMesh();
     } else {
-      const geo = new THREE.SphereGeometry(0.35, 8, 8);
-      const mat = new THREE.MeshBasicMaterial({ color: 0xffaa22 });
-      mesh = new THREE.Mesh(geo, mat);
+      mesh = this.getEnemyShellMesh();
     }
 
     mesh.position.copy(origin);
@@ -2139,6 +2223,7 @@ export class GameEngine {
   private updateProjectiles(dt: number) {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const p = this.projectiles[i];
+      if (p.dead) continue;
       p.lifetime += dt;
 
       // Homing logic (missiles + kamikaze drone steer to target)
@@ -2218,18 +2303,17 @@ export class GameEngine {
           if (!hit) {
             for (let k = this.projectiles.length - 1; k >= 0; k--) {
               const ep = this.projectiles[k];
-              if (ep === p || ep.type !== 'enemy_shell' || ep.hp === undefined || ep.hp <= 0) continue;
+              if (ep === p || ep.dead || ep.type !== 'enemy_shell' || ep.hp === undefined || ep.hp <= 0) continue;
               const d2 = Math.hypot(p.position.x - ep.position.x, p.position.y - ep.position.y, p.position.z - ep.position.z);
               if (d2 < 1.2) {
                 ep.hp = 0;
+                ep.dead = true;
                 hit = true;
                 this.stats.shotsHit++;
                 this.stats.score += 50;
                 this.addFloater(ep.position.x, ep.position.y, ep.position.z, 'SHELL DOWN +50', '#7dd8ff');
                 this.createExplosion(ep.position.x, ep.position.y, ep.position.z, 'small');
-                // Remove the intercepted shell
                 this.scene.remove(ep.mesh);
-                this.projectiles.splice(k, 1);
                 break;
               }
             }
@@ -2268,10 +2352,14 @@ export class GameEngine {
       }
 
       if (hit || p.lifetime >= p.maxLifetime) {
+        p.dead = true;
         this.scene.remove(p.mesh);
-        this.projectiles.splice(i, 1);
-        continue;
       }
+    }
+
+    // Clean up dead projectiles safely in batch without index mutation issues
+    if (this.projectiles.some((proj) => proj.dead)) {
+      this.projectiles = this.projectiles.filter((proj) => !proj.dead);
     }
   }
 
@@ -2333,6 +2421,8 @@ export class GameEngine {
       if (e.type === 'apc') this.stats.kills.apcs++;
       if (e.type === 'helicopter') this.stats.kills.helicopters++;
       if (e.type === 'paratrooper') this.stats.kills.paratroopers++;
+      if (e.type === 'jet') this.stats.kills.jets = (this.stats.kills.jets || 0) + 1;
+      if (e.type === 'transport_plane') this.stats.kills.transportPlanes = (this.stats.kills.transportPlanes || 0) + 1;
 
       const queuedEnemies = this.echelons.reduce((sum, ech) => sum + ech.queue.length, 0);
       this.stats.remainingWaveEnemies = Math.max(0, this.enemies.filter((en) => !en.dead).length + queuedEnemies);

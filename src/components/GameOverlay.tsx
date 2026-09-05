@@ -217,6 +217,18 @@ export const GameOverlay: React.FC<GameOverlayProps> = ({
               <span>AIRBORNE INTERCEPTED:</span>
               <b className="text-white">{stats.kills.paratroopers}</b>
             </div>
+            {(stats.kills.jets ?? 0) > 0 && (
+              <div className="flex justify-between">
+                <span>FIGHTER JETS DOWNED:</span>
+                <b className="text-white">{stats.kills.jets}</b>
+              </div>
+            )}
+            {(stats.kills.transportPlanes ?? 0) > 0 && (
+              <div className="flex justify-between">
+                <span>TRANSPORTS DOWNED:</span>
+                <b className="text-white">{stats.kills.transportPlanes}</b>
+              </div>
+            )}
           </div>
 
           <button
@@ -290,6 +302,18 @@ export const GameOverlay: React.FC<GameOverlayProps> = ({
               <span>AIRBORNE PARATROOPERS INTERCEPTED:</span>
               <b className="text-yellow-400">{stats.kills.paratroopers}</b>
             </div>
+            {(stats.kills.jets ?? 0) > 0 && (
+              <div className="flex justify-between text-zinc-300">
+                <span>FIGHTER JETS DOWNED:</span>
+                <b className="text-sky-400">{stats.kills.jets}</b>
+              </div>
+            )}
+            {(stats.kills.transportPlanes ?? 0) > 0 && (
+              <div className="flex justify-between text-zinc-300">
+                <span>CARGO TRANSPORTS DOWNED:</span>
+                <b className="text-indigo-400">{stats.kills.transportPlanes}</b>
+              </div>
+            )}
             <div className="flex justify-between text-zinc-300">
               <span>INFANTRY SOLDIERS NEUTRALIZED:</span>
               <b className="text-emerald-400">{stats.kills.soldiers}</b>

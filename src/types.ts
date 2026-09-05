@@ -76,6 +76,7 @@ export interface EnemyEntity {
   // Paratrooper specifics
   parachuteMesh?: any;
   landingY?: number;
+  stopDist?: number; // Assigned engagement/stopping distance from redoubt for tanks/APCs
 
   // Cargo plane / jet specifics
   dropInterval?: number;   // seconds between sequential paratrooper drops (cargo plane)
@@ -98,6 +99,7 @@ export interface ProjectileEntity {
   maxLifetime: number;
   targetId?: number; // for homing missiles
   hp?: number;       // shootable enemy shells (interception mechanic)
+  dead?: boolean;    // marked for safe removal to prevent array mutation bugs during iteration
 }
 
 export interface ParticleEntity {
@@ -149,6 +151,8 @@ export interface GameStats {
     apcs: number;
     helicopters: number;
     paratroopers: number;
+    jets?: number;
+    transportPlanes?: number;
   };
   shotsFired: number;
   shotsHit: number;
