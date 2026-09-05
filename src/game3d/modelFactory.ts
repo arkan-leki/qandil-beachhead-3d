@@ -1969,3 +1969,99 @@ export function createMountainTerrain(): {
 
   return { terrainGroup, getHeightAt };
 }
+
+/**
+ * 6. 3D Parachute Supply Drop Model
+ * Features high-visibility golden-striped airdrop parachute canopy, suspension lines,
+ * steel-reinforced military supply container with NATO cross markings and emergency
+ * pulsing beacon strobe.
+ */
+export function createSupplyCrateModel(): {
+  group: THREE.Group;
+  crateMesh: THREE.Mesh;
+  parachuteMesh: THREE.Mesh;
+  beaconLight: THREE.PointLight;
+} {
+  const group = new THREE.Group();
+  group.name = 'supply_drop';
+
+  // Bright friendly parachute (Goldenrod & White stripes)
+  const canopyGeo = new THREE.SphereGeometry(3.6, 18, 14, 0, Math.PI * 2, 0, Math.PI / 1.6);
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d')!;
+  const segments = 16;
+  const segW = canvas.width / segments;
+  for (let s = 0; s < segments; s++) {
+    ctx.fillStyle = s % 2 === 0 ? '#f59e0b' : '#ffffff';
+    ctx.fillRect(s * segW, 0, segW, canvas.height);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  const chuteMat = new THREE.MeshStandardMaterial({
+    map: tex,
+    roughness: 0.7,
+    side: THREE.DoubleSide,
+  });
+
+  const parachuteMesh = new THREE.Mesh(canopyGeo, chuteMat);
+  parachuteMesh.position.set(0, 5.2, 0);
+  group.add(parachuteMesh);
+
+  // Suspension shroud lines
+  const linePositions: number[] = [];
+  const count = 12;
+  for (let i = 0; i < count; i++) {
+    const ang = (i / count) * Math.PI * 2;
+    const rimX = Math.cos(ang) * 3.4;
+    const rimZ = Math.sin(ang) * 3.4;
+    const rimY = 5.2 + 0.4;
+    linePositions.push(rimX, rimY, rimZ);
+    linePositions.push(0, 1.2, 0);
+  }
+  const lineGeo = new THREE.BufferGeometry();
+  lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
+  const cables = new THREE.LineSegments(lineGeo, materials.cables);
+  group.add(cables);
+
+  // Heavy steel reinforced supply container
+  const crateMat = new THREE.MeshStandardMaterial({
+    color: 0x225533, // military olive-emerald
+    roughness: 0.5,
+    metalness: 0.6,
+  });
+  const crateGeo = new THREE.BoxGeometry(1.6, 1.4, 1.6);
+  const crateMesh = new THREE.Mesh(crateGeo, crateMat);
+  crateMesh.position.set(0, 0.7, 0);
+  crateMesh.castShadow = true;
+  group.add(crateMesh);
+
+  // Steel corner brackets and reinforcement frame
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x202426, metalness: 0.8, roughness: 0.3 });
+  const topPlate = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.1, 1.7), frameMat);
+  topPlate.position.set(0, 1.45, 0);
+  group.add(topPlate);
+
+  const bottomPlate = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.1, 1.7), frameMat);
+  bottomPlate.position.set(0, 0.05, 0);
+  group.add(bottomPlate);
+
+  // Medical/munitions cross markings (white decal on sides)
+  const crossMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const crossH = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.25, 1.62), crossMat);
+  crossH.position.set(0, 0.7, 0);
+  const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.8, 1.62), crossMat);
+  crossV.position.set(0, 0.7, 0);
+  group.add(crossH, crossV);
+
+  // High-intensity emergency beacon strobe on top
+  const beaconLight = new THREE.PointLight(0x10b981, 4.0, 45);
+  beaconLight.position.set(0, 1.8, 0);
+  group.add(beaconLight);
+
+  const beaconCap = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), new THREE.MeshBasicMaterial({ color: 0x34d399 }));
+  beaconCap.position.set(0, 1.6, 0);
+  group.add(beaconCap);
+
+  return { group, crateMesh, parachuteMesh, beaconLight };
+}

@@ -13,6 +13,7 @@ import {
   ParticleEntity,
   ProjectileEntity,
   RadarBlip,
+  SupplyDropEntity,
   WaveConfig,
   WeaponState,
   WeaponType,
@@ -27,6 +28,7 @@ import {
   createParatrooperModel,
   createShaheenDroneModel,
   createSoldierModel,
+  createSupplyCrateModel,
   createTankModel,
   createTransportPlaneModel,
 } from './modelFactory';
@@ -265,6 +267,8 @@ export class GameEngine {
 
   // Entities & Simulation
   private enemies: EnemyEntity[] = [];
+  private supplyDrops: SupplyDropEntity[] = [];
+  private supplyDropTimer: number = 25; // seconds until first supply drop
   private projectiles: ProjectileEntity[] = [];
   private particles: ParticleEntity[] = [];
   private nextEntityId: number = 1;
@@ -349,10 +353,11 @@ export class GameEngine {
   // Callback hooks for React UI
   public onStatsUpdate?: (stats: GameStats) => void;
   public onWeaponUpdate?: (weapons: Record<WeaponType, WeaponState>, current: WeaponType) => void;
-  public onRadarUpdate?: (blips: RadarBlip[], headingDeg: number) => void;
+  public onRadarUpdate?: (blips: RadarBlip[], headingDeg: number, pitchDeg?: number) => void;
   public onWaveComplete?: (wave: number) => void;
   public onGameOver?: (stats: GameStats) => void;
   public onNightChange?: (night: boolean) => void;
+  public onSupplyAlert?: (text: string, color: 'emerald' | 'gold') => void;
 
   public setDifficulty(diff: Difficulty) {
     this.difficulty = diff;
@@ -731,6 +736,8 @@ export class GameEngine {
       }
     }
     this.enemies = this.enemies.filter((e) => !e.dead);
+    this.supplyDrops.forEach((sd) => this.scene.remove(sd.meshGroup));
+    this.supplyDrops = [];
     this.projectiles.forEach((p) => this.scene.remove(p.mesh));
     this.projectiles = [];
     this.echelons = [];
@@ -1272,6 +1279,9 @@ export class GameEngine {
     // Night missions begin at wave 10 (as documented in PLAN.md)
     this.setNight(waveNum >= 10);
 
+    // Allied supply drop cadence: first drop comes at 14s in wave 1, then periodically
+    this.supplyDropTimer = waveNum === 1 ? 14 : 20 + Math.random() * 15;
+
     const diff = DIFFICULTY_SETTINGS[this.difficulty];
 
     // Configure wave composition scaled by difficulty
@@ -1564,8 +1574,10 @@ export class GameEngine {
       const spawnX = Math.sin(jetAngle) * jetDist;
       const spawnZ = Math.cos(jetAngle) * jetDist;
       const jetAlt = 45 + Math.random() * 20;
+      const jetDir = new THREE.Vector3(-spawnX, 0, -spawnZ).normalize();
+      const jetSpeed = (55 + Math.random() * 15) * ws.speedMult;
       group.position.set(spawnX, jetAlt, spawnZ);
-      group.lookAt(0, jetAlt, 0);
+      group.lookAt(spawnX + jetDir.x * 10, jetAlt, spawnZ + jetDir.z * 10);
       this.scene.add(group);
 
       const jetHp = Math.round(75 * hpMult);
@@ -1574,10 +1586,10 @@ export class GameEngine {
         type: 'jet',
         meshGroup: group,
         position: { x: spawnX, y: jetAlt, z: spawnZ },
-        velocity: { x: 0, y: 0, z: 0 },
+        velocity: { x: jetDir.x * jetSpeed, y: 0, z: jetDir.z * jetSpeed },
         hp: jetHp,
         maxHp: jetHp,
-        speed: (55 + Math.random() * 15) * ws.speedMult,
+        speed: jetSpeed,
         scoreValue: 300,
         hitRadius: 4.5,
         dead: false,
@@ -1597,8 +1609,10 @@ export class GameEngine {
       spawnX = Math.sin(planeAngle) * planeDist;
       spawnZ = Math.cos(planeAngle) * planeDist;
       const planeAlt = 70 + Math.random() * 15;
+      const planeDir = new THREE.Vector3(-spawnX, 0, -spawnZ).normalize();
+      const planeSpeed = (20 + Math.random() * 5) * ws.speedMult;
       group.position.set(spawnX, planeAlt, spawnZ);
-      group.lookAt(0, planeAlt, 0);
+      group.lookAt(spawnX + planeDir.x * 10, planeAlt, spawnZ + planeDir.z * 10);
       this.scene.add(group);
 
       const planeHp = Math.round(100 * hpMult);
@@ -1607,10 +1621,10 @@ export class GameEngine {
         type: 'transport_plane',
         meshGroup: group,
         position: { x: spawnX, y: planeAlt, z: spawnZ },
-        velocity: { x: 0, y: 0, z: 0 },
+        velocity: { x: planeDir.x * planeSpeed, y: 0, z: planeDir.z * planeSpeed },
         hp: planeHp,
         maxHp: planeHp,
-        speed: (20 + Math.random() * 5) * ws.speedMult,
+        speed: planeSpeed,
         scoreValue: 200,
         hitRadius: 7.0,
         dead: false,
@@ -2003,17 +2017,12 @@ export class GameEngine {
           });
         }
       } else if (e.type === 'jet') {
-        // Enemy fighter: fast straight strafing pass over the battlefield
-        const toPlayer = new THREE.Vector3(-e.position.x, 0, -e.position.z);
-        const dist = toPlayer.length();
-        toPlayer.normalize();
-
-        // Fly toward the battlefield, keep altitude
-        e.position.x += toPlayer.x * e.speed * dt;
-        e.position.z += toPlayer.z * e.speed * dt;
-        e.position.y = e.position.y; // maintain altitude
+        // Enemy fighter: fast straight strafing pass across the battlefield
+        const dist = Math.hypot(e.position.x, e.position.z);
+        e.position.x += e.velocity.x * dt;
+        e.position.z += e.velocity.z * dt;
         e.meshGroup.position.set(e.position.x, e.position.y, e.position.z);
-        e.meshGroup.lookAt(e.position.x + toPlayer.x * 10, e.position.y, e.position.z + toPlayer.z * 10);
+        e.meshGroup.lookAt(e.position.x + e.velocity.x * 10, e.position.y, e.position.z + e.velocity.z * 10);
 
         // Strafe-fire bursts when within firing range, then exit
         if (e.strafePhase === 'approach' && dist < 140) {
@@ -2028,34 +2037,34 @@ export class GameEngine {
             e.burstLeft = (e.burstLeft || 1) - 1;
             this.enemyShootJetGun(e);
           }
-          if (dist < 8) e.strafePhase = 'exit';
+          if (dist < 15 && (e.position.x * e.velocity.x + e.position.z * e.velocity.z > 0)) {
+            e.strafePhase = 'exit';
+          }
         }
 
-        // Exit: once well past the battlefield, despawn
-        if (e.strafePhase === 'exit' && dist > 240) {
+        // Exit: once well past the battlefield (moving away from center and dist > 260), despawn
+        if (dist > 260 && (e.position.x * e.velocity.x + e.position.z * e.velocity.z > 0)) {
           e.dead = true;
           this.scene.remove(e.meshGroup);
         }
 
       } else if (e.type === 'transport_plane') {
         // Cargo plane: slow, high flyover dropping paratroopers in sequence
-        const toPlayer = new THREE.Vector3(-e.position.x, 0, -e.position.z);
-        const dist = toPlayer.length();
-        toPlayer.normalize();
-        e.position.x += toPlayer.x * e.speed * dt;
-        e.position.z += toPlayer.z * e.speed * dt;
+        const dist = Math.hypot(e.position.x, e.position.z);
+        e.position.x += e.velocity.x * dt;
+        e.position.z += e.velocity.z * dt;
         e.meshGroup.position.set(e.position.x, e.position.y, e.position.z);
-        e.meshGroup.lookAt(e.position.x + toPlayer.x * 10, e.position.y, e.position.z + toPlayer.z * 10);
+        e.meshGroup.lookAt(e.position.x + e.velocity.x * 10, e.position.y, e.position.z + e.velocity.z * 10);
 
         // Drop paratroopers in a trailing line as it crosses the field
-        if ((e.dropsTotal || 0) > 0 && dist < 130 && performance.now() - (e.lastDropTime || 0) > (e.dropInterval || 0.7) * 1000) {
+        if ((e.dropsTotal || 0) > 0 && dist < 140 && performance.now() - (e.lastDropTime || 0) > (e.dropInterval || 0.7) * 1000) {
           e.lastDropTime = performance.now();
           e.dropsTotal = (e.dropsTotal || 1) - 1;
           this.dropParatrooperAt(e.position.x, e.position.y, e.position.z);
         }
 
-        // Despawn after crossing the far side
-        if (dist > 240) {
+        // Despawn after crossing the far side (moving away from center and dist > 240)
+        if (dist > 240 && (e.position.x * e.velocity.x + e.position.z * e.velocity.z > 0)) {
           e.dead = true;
           this.scene.remove(e.meshGroup);
         }
@@ -2319,6 +2328,21 @@ export class GameEngine {
             }
           }
 
+          // Check Player Projectiles vs Supply Drops (shoot in air or on ground to claim)
+          if (!hit) {
+            for (const sd of this.supplyDrops) {
+              if (sd.dead) continue;
+              const dCrate = Math.hypot(p.position.x - sd.position.x, p.position.y - (sd.position.y + 0.8), p.position.z - sd.position.z);
+              const dChute = sd.landed ? 999 : Math.hypot(p.position.x - sd.position.x, p.position.y - (sd.position.y + 5.2), p.position.z - sd.position.z);
+              if (dCrate < 2.4 || dChute < 3.8) {
+                hit = true;
+                this.stats.shotsHit++;
+                this.claimSupplyDrop(sd);
+                break;
+              }
+            }
+          }
+
           // Terrain impact
           if (!hit) {
             const ground = this.getHeightAt(p.position.x, p.position.z);
@@ -2472,6 +2496,188 @@ export class GameEngine {
   // Kamikaze drone detonation: big explosion + area damage to all enemies in range.
   private detonateDrone(p: ProjectileEntity) {
     this.detonateAoe(p);
+  }
+
+  /* ================= ALLIED SUPPLY DROPS ================= */
+  public triggerSupplyDrop() {
+    this.spawnSupplyDrop();
+  }
+
+  private spawnSupplyDrop() {
+    const { group, parachuteMesh, beaconLight } = createSupplyCrateModel();
+    // Drop in forward/side arc within easy view of the redoubt
+    const dropAngle = this.yaw + (Math.random() - 0.5) * 1.8;
+    const dropDist = 45 + Math.random() * 55; // 45m - 100m from bunker
+    const dropX = Math.sin(dropAngle) * dropDist;
+    const dropZ = -Math.cos(dropAngle) * dropDist;
+    const dropAlt = 90 + Math.random() * 20; // 90m - 110m altitude
+    const landingY = this.getHeightAt(dropX, dropZ);
+
+    group.position.set(dropX, dropAlt, dropZ);
+    this.scene.add(group);
+
+    const supplyEntity: SupplyDropEntity = {
+      id: this.nextEntityId++,
+      type: 'supply_drop',
+      meshGroup: group,
+      position: { x: dropX, y: dropAlt, z: dropZ },
+      velocity: { x: 0, y: -7.0, z: 0 },
+      landingY,
+      landed: false,
+      dead: false,
+      hp: 10,
+      parachuteMesh,
+      beaconLight,
+      strobeTimer: 0,
+      lifetime: 0,
+      maxLandedLifetime: 40,
+    };
+
+    this.supplyDrops.push(supplyEntity);
+
+    // Audio announcement & siren
+    soundManager.playSupplyDropInbound();
+
+    // HUD banner notification
+    if (this.onSupplyAlert) {
+      this.onSupplyAlert('ALLIED AIRDROP INBOUND — SHOOT TO SECURE', 'emerald');
+    }
+  }
+
+  private createSupplyDropSparkles(x: number, y: number, z: number) {
+    for (let i = 0; i < 28; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 2.5 + Math.random() * 5.0;
+      this.particles.push({
+        x,
+        y,
+        z,
+        vx: Math.cos(angle) * speed,
+        vy: 2.0 + Math.random() * 6.0,
+        vz: Math.sin(angle) * speed,
+        color: i % 2 === 0 ? '#10b981' : '#f59e0b',
+        size: 0.8 + Math.random() * 0.8,
+        life: 0,
+        maxLife: 0.8 + Math.random() * 0.6,
+      });
+    }
+  }
+
+  private claimSupplyDrop(sd: SupplyDropEntity) {
+    if (sd.dead) return;
+    sd.dead = true;
+    this.scene.remove(sd.meshGroup);
+
+    // Sound effect (radio chime + ammo reload clatter)
+    soundManager.playSupplyPickup();
+
+    // Resupply weapons
+    this.weapons.aa_gun.ammo = Math.min(this.weapons.aa_gun.maxAmmo, this.weapons.aa_gun.ammo + 160);
+    this.weapons.heavy_cannon.ammo = Math.min(this.weapons.heavy_cannon.maxAmmo, this.weapons.heavy_cannon.ammo + 8);
+    this.weapons.missile.ammo = Math.min(this.weapons.missile.maxAmmo, this.weapons.missile.ammo + 3);
+
+    // Base repair
+    const repairAmount = 25;
+    this.stats.baseHealth = Math.min(this.stats.maxBaseHealth, this.stats.baseHealth + repairAmount);
+
+    // Tactical airstrike resupply
+    if (this.stats.airstrikesAvailable < 3) {
+      this.stats.airstrikesAvailable++;
+    }
+
+    // Score bonus
+    this.stats.score += 250;
+
+    // Visual celebration & floating combat text
+    this.createSupplyDropSparkles(sd.position.x, sd.position.y + 1.2, sd.position.z);
+    this.createExplosion(sd.position.x, sd.position.y + 1.0, sd.position.z, 'small');
+    this.addFloater(sd.position.x, sd.position.y + 2.5, sd.position.z, 'CRATE CLAIMED! +AMMO +25 HP', '#34d399');
+
+    if (this.onSupplyAlert) {
+      this.onSupplyAlert('MUNITIONS & FIELD REPAIRS RECEIVED! (+25 HP)', 'gold');
+    }
+
+    if (this.onWeaponUpdate) {
+      this.onWeaponUpdate(this.weapons, this.currentWeapon);
+    }
+    if (this.onStatsUpdate) {
+      this.onStatsUpdate(this.stats);
+    }
+  }
+
+  private updateSupplyDrops(dt: number) {
+    // Spawning timer
+    if (this.gameState === 'playing') {
+      this.supplyDropTimer -= dt;
+
+      // Accelerated delivery if low ammo or damaged
+      const isLowAmmo = this.weapons.aa_gun.ammo < 60 || this.weapons.heavy_cannon.ammo < 5;
+      const isLowHealth = this.stats.baseHealth < 45;
+      if ((isLowAmmo || isLowHealth) && this.supplyDropTimer > 8) {
+        this.supplyDropTimer = 4;
+      }
+
+      if (this.supplyDropTimer <= 0) {
+        this.supplyDropTimer = 45 + Math.random() * 20; // drop every 45-65s
+        this.spawnSupplyDrop();
+      }
+    }
+
+    // Update active supply drops
+    for (let i = this.supplyDrops.length - 1; i >= 0; i--) {
+      const sd = this.supplyDrops[i];
+      if (sd.dead) {
+        this.supplyDrops.splice(i, 1);
+        continue;
+      }
+
+      sd.lifetime += dt;
+      sd.strobeTimer += dt;
+
+      // Pulse green high-visibility strobe
+      if (sd.beaconLight) {
+        sd.beaconLight.intensity = (Math.sin(sd.strobeTimer * 12) > 0.1) ? 5.5 : 0.4;
+      }
+
+      if (!sd.landed) {
+        // Descend with gentle sway
+        sd.position.y += sd.velocity.y * dt;
+        const swayZ = Math.sin(sd.lifetime * 2.2) * 0.12;
+        const swayX = Math.cos(sd.lifetime * 1.8) * 0.08;
+        sd.meshGroup.rotation.z = swayZ;
+        sd.meshGroup.rotation.x = swayX;
+        sd.meshGroup.position.set(sd.position.x, sd.position.y, sd.position.z);
+
+        // Check ground touchdown
+        if (sd.position.y <= sd.landingY + 0.1) {
+          sd.landed = true;
+          sd.position.y = sd.landingY;
+          sd.meshGroup.position.set(sd.position.x, sd.landingY, sd.position.z);
+          sd.meshGroup.rotation.set(0, Math.random() * Math.PI * 2, 0);
+
+          // Collapse parachute
+          if (sd.parachuteMesh) {
+            sd.parachuteMesh.visible = false;
+          }
+
+          // Auto-claim if landed right at the perimeter of the redoubt
+          const distToBunker = Math.hypot(sd.position.x, sd.position.z);
+          if (distToBunker < 30) {
+            this.claimSupplyDrop(sd);
+            this.supplyDrops.splice(i, 1);
+            continue;
+          }
+        }
+      } else {
+        // Landed on ground: wait until claimed or timeout
+        if (sd.lifetime > sd.maxLandedLifetime) {
+          sd.dead = true;
+          this.scene.remove(sd.meshGroup);
+          this.supplyDrops.splice(i, 1);
+          continue;
+        }
+      }
+    }
   }
 
   private updateFloaters(dt: number) {    for (let i = this.floaters.length - 1; i >= 0; i--) {
@@ -2676,9 +2882,28 @@ export class GameEngine {
       });
     }
 
+    for (const sd of this.supplyDrops) {
+      if (sd.dead) continue;
+      const dist = Math.hypot(sd.position.x, sd.position.z);
+      const worldBearing = Math.atan2(sd.position.x, -sd.position.z);
+      let relAngle = worldBearing - turretHeading;
+      while (relAngle > Math.PI) relAngle -= Math.PI * 2;
+      while (relAngle < -Math.PI) relAngle += Math.PI * 2;
+
+      blips.push({
+        id: sd.id,
+        type: 'supply_drop',
+        distance: dist,
+        angleRel: relAngle,
+        compassAngle: ((worldBearing * 180) / Math.PI + 360) % 360,
+        elevation: sd.position.y,
+      });
+    }
+
     const headingDeg = ((turretHeading * 180) / Math.PI + 360) % 360;
+    const pitchDeg = Math.round((this.pitch * 180) / Math.PI);
     if (this.onRadarUpdate) {
-      this.onRadarUpdate(blips, headingDeg);
+      this.onRadarUpdate(blips, headingDeg, pitchDeg);
     }
   }
 
@@ -2750,6 +2975,7 @@ export class GameEngine {
     // Simulation updates
     this.updateSpawning(dt);
     this.updateEnemies(dt);
+    this.updateSupplyDrops(dt);
     this.updateProjectiles(dt);
     this.updateParticles(dt);
     this.updateFloaters(dt);

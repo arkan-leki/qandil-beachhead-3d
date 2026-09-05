@@ -122,6 +122,7 @@ export default function App() {
   const [currentWeapon, setCurrentWeapon] = useState<WeaponType>('m60');
   const [radarBlips, setRadarBlips] = useState<RadarBlip[]>([]);
   const [headingDeg, setHeadingDeg] = useState<number>(0);
+  const [pitchDeg, setPitchDeg] = useState<number>(0);
   const [zoomLevel, setZoomLevel] = useState<number>(1.0);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isNight, setIsNight] = useState<boolean>(false);
@@ -137,6 +138,7 @@ export default function App() {
   const [isPortrait, setIsPortrait] = useState<boolean>(false);
   const [isTouch, setIsTouch] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [supplyNotice, setSupplyNotice] = useState<{ text: string; color: 'emerald' | 'gold'; key: number } | null>(null);
 
   // Fullscreen toggle
   useEffect(() => {
@@ -204,9 +206,10 @@ export default function App() {
       setCurrentWeapon(curW);
     };
 
-    engine.onRadarUpdate = (blips, heading) => {
+    engine.onRadarUpdate = (blips, heading, pitch) => {
       setRadarBlips(blips);
       setHeadingDeg(heading);
+      if (pitch !== undefined) setPitchDeg(pitch);
     };
 
     engine.onWaveComplete = (wave) => {
@@ -220,6 +223,13 @@ export default function App() {
 
     engine.onNightChange = (night) => {
       setIsNight(night);
+    };
+
+    engine.onSupplyAlert = (text, color) => {
+      setSupplyNotice({ text, color, key: Date.now() });
+      setTimeout(() => {
+        setSupplyNotice((prev) => (prev?.text === text ? null : prev));
+      }, 3400);
     };
 
     // NOTE: settings modal only opens via the explicit ⚙️ button. We intentionally
@@ -384,6 +394,7 @@ export default function App() {
         currentWeapon={currentWeapon}
         radarBlips={radarBlips}
         headingDeg={headingDeg}
+        pitchDeg={pitchDeg}
         zoomLevel={zoomLevel}
         isMuted={isMuted}
         isNight={isNight}
@@ -402,6 +413,7 @@ export default function App() {
         isFullscreen={isFullscreen}
         kamikazeReady={(stats.kamikazeCooldown ?? 0) <= 0}
         onKamikaze={handleKamikaze}
+        supplyNotice={supplyNotice}
       />
 
       {/* Overlays: Start Briefing, Wave Clear, Game Over */}

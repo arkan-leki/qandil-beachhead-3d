@@ -117,9 +117,26 @@ export interface ParticleEntity {
   smoke?: boolean;      // render on the alpha-blended smoke/dust layer vs additive glow
 }
 
+export interface SupplyDropEntity {
+  id: number;
+  type: 'supply_drop';
+  meshGroup: any; // THREE.Group
+  position: { x: number; y: number; z: number };
+  velocity: { x: number; y: number; z: number };
+  landingY: number;
+  landed: boolean;
+  dead: boolean;
+  hp: number;
+  parachuteMesh?: any;
+  beaconLight?: any;
+  strobeTimer: number;
+  lifetime: number;
+  maxLandedLifetime: number;
+}
+
 export interface RadarBlip {
   id: number;
-  type: EnemyType;
+  type: EnemyType | 'supply_drop';
   distance: number;
   angleRel: number; // Angle relative to player turret view (-PI to +PI)
   compassAngle: number; // 0 to 360 world bearing

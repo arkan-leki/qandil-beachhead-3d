@@ -9,6 +9,7 @@ interface TurretControlsHUDProps {
   currentWeapon: WeaponType;
   radarBlips: RadarBlip[];
   headingDeg: number;
+  pitchDeg?: number;
   zoomLevel: number;
   isMuted: boolean;
   isNight: boolean;
@@ -27,6 +28,7 @@ interface TurretControlsHUDProps {
   isFullscreen?: boolean;
   kamikazeReady?: boolean;
   onKamikaze?: () => void;
+  supplyNotice?: { text: string; color: 'emerald' | 'gold'; key: number } | null;
 }
 
 const WEAPON_LIST: { type: WeaponType; key: string; short: string; icon: string }[] = [
@@ -47,6 +49,7 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
   zoomLevel,
   radarBlips,
   headingDeg,
+  pitchDeg,
   onSwitchWeapon,
   onReload,
   onToggleZoom,
@@ -60,6 +63,7 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
   isFullscreen,
   kamikazeReady,
   onKamikaze,
+  supplyNotice,
 }) => {
   const activeW = weapons[currentWeapon];
   const hpPercent = (stats.baseHealth / stats.maxBaseHealth) * 100;
@@ -155,6 +159,22 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
         </div>
       )}
 
+      {/* ---- Supply Drop banner (transient) ---- */}
+      {supplyNotice && (
+        <div key={supplyNotice.key} className="absolute top-[24%] inset-x-0 flex justify-center pointer-events-none z-30 px-4">
+          <div className={`px-5 py-2 rounded-sm border text-center shadow-lg backdrop-blur-xs flex items-center gap-2.5 ${
+            supplyNotice.color === 'emerald'
+              ? 'bg-emerald-950/90 border-emerald-400/80 text-emerald-300 shadow-emerald-950/60'
+              : 'bg-amber-950/90 border-amber-400/80 text-amber-300 shadow-amber-950/60'
+          }`} style={{ animation: 'waveIn 0.3s ease-out, fadeUp 2.6s ease-in 0.3s forwards' }}>
+            <span className="text-xl">🪂</span>
+            <div className="font-mono text-xs sm:text-sm font-black tracking-wider">
+              {supplyNotice.text}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ---- Top row: score (left) · 360 radar/compass (centre) · buttons (right) ---- */}
       <div className="flex items-start justify-between w-full gap-2">
         {/* Top-LEFT: score + wave detail cluster */}
@@ -185,7 +205,7 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
 
           {/* 360° compass + enemy radar (bottom-left corner) */}
           <div className="scale-75 sm:scale-90 origin-top-left">
-            <RadarHUD blips={radarBlips} headingDeg={headingDeg} />
+            <RadarHUD blips={radarBlips} headingDeg={headingDeg} pitchDeg={pitchDeg} />
           </div>
         </div>
 

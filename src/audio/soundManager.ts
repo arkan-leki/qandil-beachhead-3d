@@ -491,6 +491,45 @@ class SoundManager {
     osc.stop(t + 1.25);
   }
 
+  // Friendly supply drop inbound callout chime
+  public playSupplyDropInbound() {
+    if (this.isMuted || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    [587.33, 880, 1174.66].forEach((freq, idx) => {
+      const start = t + idx * 0.12;
+      const osc = this.ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, start);
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.22, start);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.28);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(start);
+      osc.stop(start + 0.3);
+    });
+  }
+
+  // Supply pickup fanfare + munitions reload
+  public playSupplyPickup() {
+    if (this.isMuted || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    [523.25, 659.25, 783.99, 1046.5].forEach((freq, idx) => {
+      const start = t + idx * 0.07;
+      const osc = this.ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, start);
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.28, start);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.22);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(start);
+      osc.stop(start + 0.24);
+    });
+    setTimeout(() => this.playReload(), 120);
+  }
+
   // Enemy soldier rifle shot
   public playEnemyRifle() {
     if (this.isMuted || !this.ctx) return;
