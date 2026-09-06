@@ -96,6 +96,14 @@ export const GameOverlay: React.FC<GameOverlayProps> = ({
                 EN
               </button>
               <button
+                onClick={() => onSelectLanguage('zh')}
+                className={`px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold transition-all cursor-pointer ${
+                  lang === 'zh' ? 'bg-amber-600 text-white shadow-sm' : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                中文
+              </button>
+              <button
                 onClick={() => onSelectLanguage('ku')}
                 className={`px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold transition-all cursor-pointer ${
                   lang === 'ku' ? 'bg-amber-600 text-white shadow-sm' : 'text-zinc-400 hover:text-white'
@@ -215,6 +223,14 @@ export const GameOverlay: React.FC<GameOverlayProps> = ({
                 }`}
               >
                 EN
+              </button>
+              <button
+                onClick={() => onSelectLanguage('zh')}
+                className={`px-1.5 sm:px-2 py-0.5 rounded text-[10px] font-bold ${
+                  lang === 'zh' ? 'bg-amber-600 text-white' : 'text-zinc-400'
+                }`}
+              >
+                中文
               </button>
               <button
                 onClick={() => onSelectLanguage('ku')}

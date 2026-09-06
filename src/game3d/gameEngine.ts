@@ -119,6 +119,9 @@ export class GameEngine {
   // Allied Air Support (Fighter Jet Strikes)
   private alliedJets: { group: THREE.Group; velocity: THREE.Vector3; bombsLeft: number; lastBombTime: number; targetX: number; targetZ: number }[] = [];
 
+  private readonly _tmpEnemyPos = new THREE.Vector3();
+  private readonly _tmpToEnemy = new THREE.Vector3();
+
   // Player Turret (two ZU-23 AA units + twin 105mm cannons)
   private turretBaseGroup: THREE.Group;
   private turretPitchGroup: THREE.Group;
@@ -358,6 +361,12 @@ export class GameEngine {
   public onGameOver?: (stats: GameStats) => void;
   public onNightChange?: (night: boolean) => void;
   public onSupplyAlert?: (text: string, color: 'emerald' | 'gold') => void;
+  public onCheatNotice?: (msg: string) => void;
+  public onToggleCheatConsole?: () => void;
+
+  // Classic Beachhead Cheats
+  public isGodMode: boolean = false;
+  public isInfiniteAmmo: boolean = false;
 
   public setDifficulty(diff: Difficulty) {
     this.difficulty = diff;
@@ -595,20 +604,38 @@ export class GameEngine {
 
     // Keyboard Shortcuts
     window.addEventListener('keydown', (e) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') {
+        if (e.code === 'Escape' && this.onToggleCheatConsole) {
+          this.onToggleCheatConsole();
+        }
+        return;
+      }
+
       if (e.code === 'Digit1') this.switchWeapon('m60');
       if (e.code === 'Digit2') this.switchWeapon('aa_gun');
       if (e.code === 'Digit3') this.switchWeapon('heavy_cannon');
       if (e.code === 'Digit4') this.switchWeapon('missile');
       if (e.code === 'Digit5') this.switchWeapon('handgun');
+      // Classic Beachhead shortcuts: M = Missile, G = Handgun
+      if (e.code === 'KeyM') this.switchWeapon('missile');
+      if (e.code === 'KeyG') this.switchWeapon('handgun');
       if (e.code === 'KeyB') this.triggerAirstrike();
       if (e.code === 'KeyF') this.fireFlare();
       if (e.code === 'KeyR') this.reloadWeapon(this.currentWeapon);
       if (e.code === 'KeyZ' || e.code === 'ShiftLeft') this.toggleZoom();
       if (e.code === 'Space') this.isFiring = true;
-      // DEV ONLY: wave skipping & night toggling only active in dev mode
-      if (import.meta.env.DEV) {
-        if (e.code === 'BracketRight') this.skipToNextWave();
-        if (e.code === 'BracketLeft') this.setNight(!this.isNight);
+      // Classic Beachhead skip cheats: '+' / '=' or ']'
+      if (e.code === 'Equal' || e.code === 'NumpadAdd' || e.code === 'BracketRight') {
+        this.applyCheat('skip');
+      }
+      if (e.code === 'BracketLeft') {
+        this.applyCheat('night');
+      }
+      // F9 or `~` to toggle Cheat Console
+      if (e.code === 'Backquote' || e.code === 'F9') {
+        e.preventDefault();
+        if (this.onToggleCheatConsole) this.onToggleCheatConsole();
       }
     });
 
@@ -742,6 +769,125 @@ export class GameEngine {
     this.projectiles = [];
     this.echelons = [];
     this.startWave(this.stats.wave + 1);
+  }
+
+  // Classic Beachhead Cheats Processor (from Beach Head 2000 / 2002 / Baidu Baike 1430129)
+  public applyCheat(rawCode: string): { success: boolean; message: string } {
+    const cmd = rawCode.trim().toLowerCase();
+    if (!cmd) return { success: false, message: '' };
+
+    // God Mode (Invincible)
+    if (cmd === 'god' || cmd === 'godmode' || cmd === 'invincible') {
+      this.isGodMode = !this.isGodMode;
+      soundManager.playSupplyPickup();
+      const msg = this.isGodMode ? 'GOD MODE ACTIVATED: BUNKER IS INVULNERABLE' : 'GOD MODE DEACTIVATED';
+      if (this.onCheatNotice) this.onCheatNotice(msg);
+      return { success: true, message: msg };
+    }
+
+    // Unlimited Ammunition
+    if (cmd === 'ammo' || cmd === 'bullet' || cmd === 'infinite') {
+      this.isInfiniteAmmo = !this.isInfiniteAmmo;
+      if (this.isInfiniteAmmo) {
+        for (const k of Object.keys(this.weapons) as WeaponType[]) {
+          this.weapons[k].ammo = this.weapons[k].maxAmmo;
+          this.weapons[k].reloading = false;
+          this.weapons[k].heat = 0;
+          this.weapons[k].overheated = false;
+        }
+      }
+      soundManager.playReload();
+      const msg = this.isInfiniteAmmo ? 'INFINITE AMMO ACTIVATED: WEAPONS NEVER EMPTY' : 'INFINITE AMMO DEACTIVATED';
+      if (this.onWeaponUpdate) this.onWeaponUpdate(this.weapons, this.currentWeapon);
+      if (this.onCheatNotice) this.onCheatNotice(msg);
+      return { success: true, message: msg };
+    }
+
+    // Classic Beach Head 2000 Cheat: LOCK AND LOAD (Full health & ammunition)
+    if (cmd === 'lock and load' || cmd === 'lockandload' || cmd === 'full' || cmd === 'heal' || cmd === 'repair') {
+      for (const k of Object.keys(this.weapons) as WeaponType[]) {
+        this.weapons[k].ammo = this.weapons[k].maxAmmo;
+        this.weapons[k].reloading = false;
+        this.weapons[k].heat = 0;
+        this.weapons[k].overheated = false;
+      }
+      this.stats.baseHealth = this.stats.maxBaseHealth;
+      this.stats.airstrikesAvailable = Math.max(this.stats.airstrikesAvailable, 3);
+      soundManager.playSupplyPickup();
+      if (this.onStatsUpdate) this.onStatsUpdate(this.stats);
+      if (this.onWeaponUpdate) this.onWeaponUpdate(this.weapons, this.currentWeapon);
+      const msg = 'LOCK AND LOAD: BUNKER REPAIRED & AMMUNITION RESTOCKED';
+      if (this.onCheatNotice) this.onCheatNotice(msg);
+      return { success: true, message: msg };
+    }
+
+    // Classic Beach Head 2000 Cheat: KILL THEM HIGH (Destroy all enemies on field)
+    if (cmd === 'kill them high' || cmd === 'killthemhigh' || cmd === 'destroy all' || cmd === 'destroyall' || cmd === 'nuke') {
+      let count = 0;
+      for (const e of this.enemies) {
+        if (!e.dead) {
+          e.dead = true;
+          this.createExplosion(e.position.x, e.position.y, e.position.z, 'large');
+          this.scene.remove(e.meshGroup);
+          this.stats.score += e.scoreValue;
+          this.stats.shotsHit++;
+          count++;
+        }
+      }
+      this.enemies = this.enemies.filter((e) => !e.dead);
+      soundManager.playExplosion('large');
+      if (this.onStatsUpdate) this.onStatsUpdate(this.stats);
+      const msg = `KILL THEM HIGH: ${count} HOSTILES DESTROYED`;
+      if (this.onCheatNotice) this.onCheatNotice(msg);
+      return { success: true, message: msg };
+    }
+
+    // Classic Beach Head 2003 Cheat: SAY UNCLE / EAT YOUR SPINACH / SKIP
+    if (cmd === 'say uncle' || cmd === 'sayuncle' || cmd === 'eat your spinach' || cmd === 'skip' || cmd === 'next' || cmd === '+') {
+      this.skipToNextWave();
+      soundManager.playWaveHorn();
+      const msg = `SAY UNCLE: ADVANCED TO WAVE ${this.stats.wave}`;
+      if (this.onCheatNotice) this.onCheatNotice(msg);
+      return { success: true, message: msg };
+    }
+
+    // Instant Supply Crate
+    if (cmd === 'airdrop' || cmd === 'supply' || cmd === 'crate') {
+      this.spawnSupplyDrop();
+      const msg = 'ALLIED AIRDROP INBOUND';
+      if (this.onCheatNotice) this.onCheatNotice(msg);
+      return { success: true, message: msg };
+    }
+
+    // Air Support
+    if (cmd === 'airstrike' || cmd === 'bomber' || cmd === 'jet') {
+      this.stats.airstrikesAvailable += 3;
+      soundManager.playJetFlyby();
+      if (this.onStatsUpdate) this.onStatsUpdate(this.stats);
+      const msg = `AIR REINFORCEMENTS: +3 AIRSTRIKES (TOTAL: ${this.stats.airstrikesAvailable})`;
+      if (this.onCheatNotice) this.onCheatNotice(msg);
+      return { success: true, message: msg };
+    }
+
+    // Toggle Night / Day
+    if (cmd === 'night' || cmd === 'day') {
+      this.setNight(!this.isNight);
+      const msg = this.isNight ? 'NIGHT BATTLE ENGAGED' : 'DAYLIGHT ENGAGED';
+      if (this.onCheatNotice) this.onCheatNotice(msg);
+      return { success: true, message: msg };
+    }
+
+    if (cmd === 'help' || cmd === '?') {
+      return {
+        success: true,
+        message: 'CHEATS: god, ammo, lock and load, kill them high, say uncle / skip, airdrop, airstrike, night',
+      };
+    }
+
+    return {
+      success: false,
+      message: `UNKNOWN CHEAT: "${rawCode}". TRY: god, ammo, lock and load, kill them high, skip`,
+    };
   }
 
   public triggerAirstrike() {
@@ -895,7 +1041,12 @@ export class GameEngine {
     // M60 overheat blocks firing until cooled down
     if (w.overheated) return;
 
-    if (w.ammo <= 0) {
+    if (this.isInfiniteAmmo) {
+      w.ammo = w.maxAmmo;
+      w.reloading = false;
+      w.overheated = false;
+      w.heat = 0;
+    } else if (w.ammo <= 0) {
       if (w.unlimited) {
         // Infinite-reserve weapon: auto-reload a fresh magazine
         this.reloadWeapon(this.currentWeapon);
@@ -908,7 +1059,11 @@ export class GameEngine {
     if (now - w.lastFired < w.fireRateMs) return;
 
     w.lastFired = now;
-    w.ammo--;
+    if (!this.isInfiniteAmmo) {
+      w.ammo--;
+    } else {
+      w.ammo = w.maxAmmo;
+    }
     this.stats.shotsFired++;
 
     // M60 heat accumulation (overheat after ~5s sustained fire)
@@ -1066,18 +1221,12 @@ export class GameEngine {
 
     for (const e of this.enemies) {
       if (e.dead) continue;
-      const toEnemy = new THREE.Vector3(
-        e.position.x - this.camera.position.x,
-        e.position.y - this.camera.position.y,
-        e.position.z - this.camera.position.z
-      ).normalize();
-      const dot = aimDir.dot(toEnemy);
-      if (dot > 0.88) { // within target acquisition cone
-        const dist = this.camera.position.distanceTo(new THREE.Vector3(e.position.x, e.position.y, e.position.z));
-        if (dist < closestDist) {
-          closestDist = dist;
-          bestTarget = e;
-        }
+      this._tmpEnemyPos.set(e.position.x, e.position.y, e.position.z);
+      const dist = this._tmpEnemyPos.distanceTo(this.camera.position);
+      this._tmpToEnemy.copy(this._tmpEnemyPos).sub(this.camera.position).normalize();
+      if (this._tmpToEnemy.dot(aimDir) > 0.88 && dist < closestDist) {
+        closestDist = dist;
+        bestTarget = e;
       }
     }
     return bestTarget;
@@ -2503,7 +2652,7 @@ export class GameEngine {
     this.spawnSupplyDrop();
   }
 
-  private spawnSupplyDrop() {
+  public spawnSupplyDrop() {
     const { group, parachuteMesh, beaconLight } = createSupplyCrateModel();
     // Drop in forward/side arc within easy view of the redoubt
     const dropAngle = this.yaw + (Math.random() - 0.5) * 1.8;
@@ -2696,6 +2845,7 @@ export class GameEngine {
   }
 
   private damagePlayerBase(dmg: number) {
+    if (this.isGodMode) return;
     this.stats.baseHealth = Math.max(0, this.stats.baseHealth - dmg);
     this.waveDamageTaken = true;
     soundManager.playHitBase();
@@ -2712,6 +2862,13 @@ export class GameEngine {
     this.gameState = 'game_over';
     soundManager.playExplosion('large');
     this.createExplosion(0, 1.8, 0, 'large');
+
+    // Clean up so a redeploy starts fresh
+    for (const sd of this.supplyDrops) this.scene.remove(sd.meshGroup);
+    this.supplyDrops = [];
+    for (const jet of this.alliedJets) this.scene.remove(jet.group);
+    this.alliedJets = [];
+
     // Persist high score
     if (this.stats.score > this.stats.highScore) {
       this.stats.highScore = this.stats.score;

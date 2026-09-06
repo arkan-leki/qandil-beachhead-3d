@@ -8,6 +8,7 @@ import { GameEngine } from './game3d/gameEngine';
 import { GameOverlay } from './components/GameOverlay';
 import { TurretControlsHUD } from './components/TurretControlsHUD';
 import { SettingsPanel } from './components/SettingsPanel';
+import { CheatConsole } from './components/CheatConsole';
 import { Difficulty, GameStats, Language, RadarBlip, WeaponState, WeaponType } from './types';
 import { I18N } from './i18n';
 
@@ -140,10 +141,14 @@ export default function App() {
   const [isTouch, setIsTouch] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [supplyNotice, setSupplyNotice] = useState<{ text: string; color: 'emerald' | 'gold'; key: number } | null>(null);
+  const [cheatConsoleOpen, setCheatConsoleOpen] = useState<boolean>(false);
+  const [isGodMode, setIsGodMode] = useState<boolean>(false);
+  const [isInfiniteAmmo, setIsInfiniteAmmo] = useState<boolean>(false);
+  const [cheatNotice, setCheatNotice] = useState<string | null>(null);
   const [lang, setLang] = useState<Language>(() => {
     try {
       const saved = localStorage.getItem('qb3d_lang');
-      if (saved === 'ku' || saved === 'en') return saved;
+      if (saved === 'ku' || saved === 'en' || saved === 'zh') return saved;
     } catch {}
     return 'en';
   });
@@ -247,6 +252,19 @@ export default function App() {
       }, 3400);
     };
 
+    engine.onCheatNotice = (msg) => {
+      setCheatNotice(msg);
+      setIsGodMode(engine.isGodMode);
+      setIsInfiniteAmmo(engine.isInfiniteAmmo);
+      setTimeout(() => {
+        setCheatNotice((prev) => (prev === msg ? null : prev));
+      }, 3200);
+    };
+
+    engine.onToggleCheatConsole = () => {
+      setCheatConsoleOpen((prev) => !prev);
+    };
+
     // NOTE: settings modal only opens via the explicit ⚙️ button. We intentionally
     // do NOT wire onMobileSettingsChange to open it, so no touch input can pop it.
     engine.onMobileSettingsChange = () => {};
@@ -256,6 +274,14 @@ export default function App() {
       engineRef.current = null;
     };
   }, []);
+
+  const handleExecuteCheat = (code: string) => {
+    if (!engineRef.current) return { success: false, message: 'Game engine not ready' };
+    const res = engineRef.current.applyCheat(code);
+    setIsGodMode(engineRef.current.isGodMode);
+    setIsInfiniteAmmo(engineRef.current.isInfiniteAmmo);
+    return res;
+  };
 
   const handleSelectDifficulty = (diff: Difficulty) => {
     setDifficulty(diff);
@@ -429,8 +455,18 @@ export default function App() {
         kamikazeReady={(stats.kamikazeCooldown ?? 0) <= 0}
         onKamikaze={handleKamikaze}
         supplyNotice={supplyNotice}
+        isGodMode={isGodMode}
+        isInfiniteAmmo={isInfiniteAmmo}
+        onOpenCheats={() => setCheatConsoleOpen(true)}
         lang={lang}
       />
+
+      {/* Floating Cheat Notification Banner */}
+      {cheatNotice && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-50 bg-emerald-950/95 border-2 border-emerald-400 text-emerald-300 px-3.5 py-1.5 rounded font-mono text-xs font-bold tracking-wider shadow-2xl animate-pulse pointer-events-none text-center">
+          ⚡ {cheatNotice}
+        </div>
+      )}
 
       {/* Overlays: Start Briefing, Wave Clear, Game Over */}
       <GameOverlay
@@ -477,6 +513,17 @@ export default function App() {
             }
           }
         }}
+        isGodMode={isGodMode}
+        isInfiniteAmmo={isInfiniteAmmo}
+        onApplyCheat={handleExecuteCheat}
+      />
+
+      {/* Classic Beachhead Cheat Terminal */}
+      <CheatConsole
+        open={cheatConsoleOpen}
+        onClose={() => setCheatConsoleOpen(false)}
+        lang={lang}
+        onExecuteCheat={handleExecuteCheat}
       />
 
       {/* Rotate-to-landscape prompt (mobile portrait) */}

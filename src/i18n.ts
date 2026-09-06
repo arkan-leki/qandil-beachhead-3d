@@ -86,6 +86,13 @@ export interface Translations {
   rotateTitle: string;
   rotateDesc: string;
 
+  // Cheats (Classic Beachhead)
+  cheats: string;
+  godMode: string;
+  infiniteAmmo: string;
+  cheatConsole: string;
+  enterCheatPrompt: string;
+
   // Weapon Names
   weaponNames: Record<WeaponType, { label: string; short: string }>;
 }
@@ -170,6 +177,12 @@ export const I18N: Record<Language, Translations> = {
 
     rotateTitle: 'ROTATE DEVICE',
     rotateDesc: 'This battle is played in landscape. Turn your phone sideways for full view and controls.',
+
+    cheats: 'CLASSIC CHEATS',
+    godMode: 'God Mode (Invincible)',
+    infiniteAmmo: 'Infinite Ammo',
+    cheatConsole: 'Cheat Console',
+    enterCheatPrompt: 'Enter classic cheat (e.g. god, ammo, lock and load, skip, kill them high)...',
 
     weaponNames: {
       m60: { label: 'Twin M60 AA', short: 'M60' },
@@ -260,12 +273,113 @@ export const I18N: Record<Language, Translations> = {
     rotateTitle: 'مۆبایلەکەت بسوڕێنەوە',
     rotateDesc: 'ئەم شەڕە بە شێوەی ئاسۆیی ئەنجام دەدرێت. مۆبایلەکەت بە تەنیشتدا بگرە بۆ بینین و کۆنتڕۆڵی تەواو.',
 
+    cheats: 'کۆدی ساختە',
+    godMode: 'نەبەزی (بێ زەرەر)',
+    infiniteAmmo: 'فیشەکی بێسنوور',
+    cheatConsole: 'کۆنسۆڵی کۆد',
+    enterCheatPrompt: 'کۆدی ساختە بنووسە (وەک god, ammo, lock and load, skip)...',
+
     weaponNames: {
       m60: { label: 'دەسڕێژی دووانەی M60', short: 'M60' },
       aa_gun: { label: 'تۆپی دژە فڕۆکەی ZU-23', short: 'ZU-23' },
       heavy_cannon: { label: 'تۆپی قورسی ١٠٥ملم', short: '١٠٥ملم' },
       missile: { label: 'مووشەکی ستینگەر', short: 'SAM' },
       handgun: { label: 'دەمانچەی تاکتیکی', short: 'دەمانچە' },
+    },
+  },
+
+  zh: {
+    gameTitle: '抢滩登陆 3D',
+    gameSubtitle: '经典阵地防御战 · 誓死坚守阵地',
+    mountainOutpost: '前沿阵地要塞',
+    selectDifficulty: '选择战役难度',
+    easy: '简单',
+    easyTag: '巡逻前哨',
+    medium: '普通',
+    mediumTag: '步坦协同',
+    hard: '困难',
+    hardTag: '全面强攻',
+    startDefense: '开始战斗',
+    controlsBrief: '瞄准: 鼠标 / 滑动 • 开火: 左键 / 点按 • 武器: [1-5/M/G] • 空袭: [B] • 秘籍: [~ / +]',
+
+    waveRepelled: '击退敌军进攻！',
+    allEchelonsCleared: '来犯装甲集群与空降部队已全数歼灭',
+    nextWave: '迎战下一波敌军',
+
+    bunkerOverrun: '碉堡阵地沦陷！',
+    breachedOnWave: '防御阵地陷落于波次',
+    redeploy: '重整旗鼓 · 再次战斗',
+    changeDifficulty: '战役难度',
+
+    score: '作战得分',
+    wave: '敌军波次',
+    kills: '击毁目标',
+    accuracy: '射击命中率',
+    highScore: '历史最高分',
+    ech: '梯队',
+
+    settings: '战备设置',
+    language: '语言选择',
+    graphicsQuality: '画面画质',
+    aimControl: '瞄准模式 (移动端)',
+    autoFire: '自动射击',
+    gyroSensitivity: '陀螺仪灵敏度',
+    aimAssist: '辅助瞄准',
+    haptics: '震动反馈',
+    invertY: 'Y轴垂直反转',
+    reducedMotion: '减少动态特效',
+    close: '关闭',
+    drag: '滑动瞄准',
+    gyro: '陀螺仪',
+    both: '混合操控',
+    off: '关闭',
+    on: '开启',
+    smart: '智能',
+    low: '低',
+    high: '高',
+    med: '中',
+
+    fire: '开火',
+    guns: '武器库',
+    tapFireHoldGuns: '点按开火 · 长按切换武器',
+    bunkerIntegrity: '碉堡装甲强度',
+    reloading: '正在装填换弹...',
+    overheat: '枪管严重过热！',
+    inf: '无限',
+    airstrikeTitle: (left) => `战机空中轰炸 (B) — 剩余 ${left} 次`,
+    kamikazeTitle: '巡飞自杀式无人机 (每60秒就绪)',
+    flareTitle: '发射夜间照明弹 (F)',
+    zoomTitle: (z) => `瞄准倍镜 (${z}x)`,
+    muteTitle: '静音',
+    unmuteTitle: '开启音效',
+    fullscreenTitle: '全屏模式',
+    exitFullscreenTitle: '退出全屏',
+    settingsTitle: '战备设置',
+    dragAimHint: '◀ 滑动 = 瞄准',
+    tapGunHint: '点按 = 开火 ▶',
+    waveBannerTitle: (w) => `第 ${w} 波 敌军来袭`,
+    nightMissionBanner: '夜间突袭战 — 探照灯已启动',
+    airdropInboundNotice: '盟军空投补给箱降落中 — 射击木箱拾取补给',
+    munitionsReceivedNotice: '弹药补给与装甲抢修已完成！(+25 装甲)',
+    wheelHoldRelease: '按住选择\n松开装备',
+    inView: '视野内',
+    tgt: '目标',
+
+    rotateTitle: '请旋转至横屏游玩',
+    rotateDesc: '抢滩登陆推荐横屏沉浸体验，请横置手机以获得更广阔的战场视野与顺畅操控。',
+
+    cheats: '经典秘籍',
+    godMode: '无敌模式 (免伤)',
+    infiniteAmmo: '无限弹药',
+    cheatConsole: '秘籍控制台',
+    enterCheatPrompt: '输入经典秘籍 (例如: god, ammo, lock and load, skip, kill them high)...',
+
+    weaponNames: {
+      m60: { label: '双联M60重机枪', short: 'M60' },
+      aa_gun: { label: 'ZU-23双联高射机炮', short: 'ZU-23' },
+      heavy_cannon: { label: '105毫米反装甲重型火炮', short: '105MM' },
+      missile: { label: '毒刺防空导弹', short: 'SAM' },
+      handgun: { label: '.45口径战术自卫手枪', short: '手枪' },
     },
   },
 };

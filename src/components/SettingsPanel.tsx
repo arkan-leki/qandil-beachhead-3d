@@ -24,6 +24,9 @@ export interface SettingsPanelProps {
   onReducedMotion: (v: boolean) => void;
   onGraphics: (v: 'low' | 'medium' | 'high') => void;
   onControlScheme: (v: 'touch' | 'gyro' | 'hybrid') => void;
+  isGodMode?: boolean;
+  isInfiniteAmmo?: boolean;
+  onApplyCheat?: (code: string) => void;
 }
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({
@@ -47,6 +50,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onReducedMotion,
   onGraphics,
   onControlScheme,
+  isGodMode = false,
+  isInfiniteAmmo = false,
+  onApplyCheat,
 }) => {
   if (!open) return null;
 
@@ -78,10 +84,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             <label className="flex items-center gap-1.5 text-zinc-400 text-[11px] mb-1 font-bold">
               <Globe className="w-3 h-3 text-amber-400" /> {t.language}
             </label>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-3 gap-1.5">
               <button
                 onClick={() => onSelectLanguage('en')}
-                className={`flex-1 py-1 rounded border text-xs font-bold transition-all cursor-pointer ${
+                className={`py-1 rounded border text-xs font-bold transition-all cursor-pointer ${
                   lang === 'en'
                     ? 'bg-amber-600 border-amber-400 text-white shadow-sm'
                     : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
@@ -90,14 +96,24 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 English
               </button>
               <button
+                onClick={() => onSelectLanguage('zh')}
+                className={`py-1 rounded border text-xs font-bold transition-all cursor-pointer ${
+                  lang === 'zh'
+                    ? 'bg-amber-600 border-amber-400 text-white shadow-sm'
+                    : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                中文 (简体)
+              </button>
+              <button
                 onClick={() => onSelectLanguage('ku')}
-                className={`flex-1 py-1 rounded border text-xs font-bold transition-all cursor-pointer ${
+                className={`py-1 rounded border text-xs font-bold transition-all cursor-pointer ${
                   lang === 'ku'
                     ? 'bg-amber-600 border-amber-400 text-white shadow-sm'
                     : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
                 }`}
               >
-                کوردی (سۆرانی)
+                کوردی
               </button>
             </div>
           </div>
@@ -206,6 +222,55 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             <Toggle label={t.invertY} value={invertY} onChange={onInvertY} />
             <Toggle label={t.reducedMotion} value={reducedMotion} onChange={onReducedMotion} />
           </div>
+
+          {/* Classic Beachhead Cheats */}
+          {onApplyCheat && (
+            <div className="border-t border-zinc-800/80 pt-2.5 mt-2">
+              <label className="block text-amber-400 text-[11px] mb-1.5 font-bold tracking-wider uppercase">
+                ⚔️ {t.cheats}
+              </label>
+              <div className="grid grid-cols-2 gap-1.5 text-xs mb-2">
+                <Toggle
+                  label={t.godMode}
+                  value={isGodMode}
+                  onChange={() => onApplyCheat('god')}
+                />
+                <Toggle
+                  label={t.infiniteAmmo}
+                  value={isInfiniteAmmo}
+                  onChange={() => onApplyCheat('ammo')}
+                />
+              </div>
+
+              {/* Quick Actions */}
+              <div className="grid grid-cols-3 gap-1 text-[10px]">
+                <button
+                  type="button"
+                  onClick={() => onApplyCheat('lock and load')}
+                  className="py-1 px-1 bg-zinc-900 border border-zinc-700 hover:border-amber-500 rounded text-zinc-300 font-bold hover:text-white transition-all cursor-pointer truncate"
+                  title="Full Ammo & HP"
+                >
+                  ⚡ {lang === 'zh' ? '弹药满载' : 'Lock & Load'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onApplyCheat('kill them high')}
+                  className="py-1 px-1 bg-zinc-900 border border-zinc-700 hover:border-red-500 rounded text-zinc-300 font-bold hover:text-white transition-all cursor-pointer truncate"
+                  title="Destroy Active Hostiles"
+                >
+                  💥 {lang === 'zh' ? '全歼敌军' : 'Nuke Enemies'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onApplyCheat('skip')}
+                  className="py-1 px-1 bg-zinc-900 border border-zinc-700 hover:border-cyan-500 rounded text-zinc-300 font-bold hover:text-white transition-all cursor-pointer truncate"
+                  title="Skip to Next Wave"
+                >
+                  ⏩ {lang === 'zh' ? '跳至下波' : 'Skip Wave'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -31,6 +31,9 @@ interface TurretControlsHUDProps {
   kamikazeReady?: boolean;
   onKamikaze?: () => void;
   supplyNotice?: { text: string; color: 'emerald' | 'gold'; key: number } | null;
+  isGodMode?: boolean;
+  isInfiniteAmmo?: boolean;
+  onOpenCheats?: () => void;
 }
 
 const WEAPON_LIST: { type: WeaponType; key: string; short: string; icon: string }[] = [
@@ -66,6 +69,9 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
   kamikazeReady,
   onKamikaze,
   supplyNotice,
+  isGodMode,
+  isInfiniteAmmo,
+  onOpenCheats,
   lang = 'en',
 }) => {
   const t = I18N[lang];
@@ -277,12 +283,33 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
             >
               ⚙️
             </button>
+            {onOpenCheats && (
+              <button
+                onClick={onOpenCheats}
+                className="w-9 h-9 rounded flex items-center justify-center border border-emerald-500/70 bg-emerald-950/70 text-emerald-300 hover:bg-emerald-900/80 font-mono font-black text-xs transition-all cursor-pointer shadow-[0_0_8px_rgba(16,185,129,0.3)]"
+                title={lang === 'zh' ? '秘籍终端 (~ / F9)' : 'Cheat Console (~ / F9)'}
+              >
+                {lang === 'zh' ? '秘' : '⚡'}
+              </button>
+            )}
           </div>
-          {autoFire && (
-            <div className="bg-emerald-950/80 border border-emerald-600/70 rounded px-1.5 py-0.5 font-mono text-[9px] text-emerald-300 font-bold tracking-widest pointer-events-none">
-              {t.autoFire}
-            </div>
-          )}
+          <div className="flex flex-wrap justify-end gap-1 pointer-events-none">
+            {isGodMode && (
+              <div className="bg-amber-950/90 border border-amber-500/80 rounded px-1.5 py-0.5 font-mono text-[9px] text-amber-300 font-bold tracking-wider shadow-[0_0_8px_rgba(245,158,11,0.4)] animate-pulse">
+                {lang === 'zh' ? '无敌模式' : 'GOD MODE'}
+              </div>
+            )}
+            {isInfiniteAmmo && (
+              <div className="bg-emerald-950/90 border border-emerald-500/80 rounded px-1.5 py-0.5 font-mono text-[9px] text-emerald-300 font-bold tracking-wider shadow-[0_0_8px_rgba(16,185,129,0.4)] animate-pulse">
+                {lang === 'zh' ? '无限弹药' : 'INF AMMO'}
+              </div>
+            )}
+            {autoFire && (
+              <div className="bg-cyan-950/80 border border-cyan-600/70 rounded px-1.5 py-0.5 font-mono text-[9px] text-cyan-300 font-bold tracking-widest">
+                {t.autoFire}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
