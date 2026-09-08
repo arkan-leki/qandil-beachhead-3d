@@ -34,6 +34,7 @@ import {
 } from './modelFactory';
 import { GunViewModel } from './gunViewModel';
 import { MobileControls, MobileSettings } from './mobileControls';
+import { updatePanoramaDayNight } from './panoramaSkybox';
 
 // Soft radial-gradient glow sprite (used as the billboard particle texture).
 // `edgeFalloff` (0..1) controls how soft the outer rim is: high = bright hot core,
@@ -170,6 +171,7 @@ export class GameEngine {
   private searchlight!: THREE.SpotLight;
   private searchlightTarget: THREE.Object3D = new THREE.Object3D();
   private flareLights: { light: THREE.PointLight; life: number; maxLife: number }[] = [];
+  private panoramaDome?: THREE.Object3D;
 
   // Weapons State
   public currentWeapon: WeaponType = 'm60';
@@ -436,6 +438,7 @@ export class GameEngine {
     const { terrainGroup, getHeightAt } = createMountainTerrain();
     this.getHeightAt = getHeightAt;
     this.scene.add(terrainGroup);
+    this.panoramaDome = terrainGroup.getObjectByName('panorama_360_dome') || undefined;
 
     // 6. Build Player Anti-Air Gun Turret atop central redoubt knoll (y = 6.0m)
     const turretData = createAntiAirGunTurret();
@@ -1326,8 +1329,14 @@ export class GameEngine {
   }
 
   /* ================= DAY / NIGHT & LIGHTING ================= */
-  public setNight(night: boolean) {
+  public setNight(night: boolean, immediate: boolean = false) {
     this.isNight = night;
+    if (immediate) {
+      this.dayNightT = night ? 1 : 0;
+      if (this.panoramaDome) {
+        updatePanoramaDayNight(this.panoramaDome, this.dayNightT);
+      }
+    }
     if (this.onNightChange) this.onNightChange(night);
   }
 
@@ -1392,6 +1401,14 @@ export class GameEngine {
 
     // Renderer exposure slightly darker at night
     this.renderer.toneMappingExposure = 1.1 * (1 - t) + 0.85 * t;
+
+    // Update 360 Mountain Panorama Dome day/night blend
+    if (!this.panoramaDome) {
+      this.panoramaDome = this.scene.getObjectByName('panorama_360_dome') || undefined;
+    }
+    if (this.panoramaDome) {
+      updatePanoramaDayNight(this.panoramaDome, t);
+    }
 
     // Searchlight: only visible at night, follows the aim
     this.searchlight.intensity = t > 0.05 ? 6.0 * t : 0;

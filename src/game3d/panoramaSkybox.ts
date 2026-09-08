@@ -1,15 +1,26 @@
 /**
- * Procedural 360-Degree Mountain Panorama & Landscape Generator
- * Generates an authentic 360-degree mountain valley panorama (inspired by Google Earth
- * satellite / terrain views of rugged mountain passes) and realistic terrain textures.
+ * Realistic 360-Degree Mountain Panorama & Landscape Generator
+ * Uses photorealistic generated panoramic mountain sky photography for authentic far eyesight,
+ * and procedural CPU textures for the ground battlefield terrain.
  */
 import * as THREE from 'three';
+import daySkyUrl from '../assets/images/mountain_sky_day_1788865460523.jpg';
+import nightSkyUrl from '../assets/images/mountain_sky_night_1788865475431.jpg';
 
 /**
  * Creates a high-definition 360 panorama canvas texture representing
  * a photorealistic mountain valley under a blue sky with cumulus clouds.
  */
 export function create360PanoramaTexture(): THREE.CanvasTexture {
+  return create360DayPanoramaTexture();
+}
+
+/**
+ * Creates a 360 day panorama texture using photorealistic mountain photography.
+ * Composited onto a 360 canvas with mirrored panels for 100% seamless looping,
+ * realistic zenith sky, and smooth horizon fog blending.
+ */
+export function create360DayPanoramaTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = 2048;
   canvas.height = 1024;
@@ -18,134 +29,117 @@ export function create360PanoramaTexture(): THREE.CanvasTexture {
   const width = canvas.width;
   const height = canvas.height;
 
-  // 1. Sky Gradient (from zenith deep sky blue down to horizon haze)
-  const skyGrad = ctx.createLinearGradient(0, 0, 0, height * 0.55);
-  skyGrad.addColorStop(0.0, '#3a7bd5'); // Deep mountain blue
-  skyGrad.addColorStop(0.35, '#6fa1db'); // Radiant azure
-  skyGrad.addColorStop(0.65, '#a7c6e6'); // Pale atmospheric blue
-  skyGrad.addColorStop(1.0, '#dbe7f2'); // Bright horizon glow
+  // 1. Initial realistic sky gradient (from deep zenith blue down to soft horizon haze)
+  const skyGrad = ctx.createLinearGradient(0, 0, 0, height);
+  skyGrad.addColorStop(0.0, '#2b65ab'); // Zenith mountain sky blue
+  skyGrad.addColorStop(0.35, '#5b8fcb'); // Clear azure
+  skyGrad.addColorStop(0.65, '#99bde1'); // Distant atmospheric haze
+  skyGrad.addColorStop(0.9, '#c8daf0'); // Lower horizon glow
+  skyGrad.addColorStop(1.0, '#9ec0de'); // Horizon fog blend color
   ctx.fillStyle = skyGrad;
-  ctx.fillRect(0, 0, width, height * 0.55);
+  ctx.fillRect(0, 0, width, height);
 
-  // 2. Realistic Fluffy Cumulus Clouds across the 360 sky
-  const drawCloud = (cx: number, cy: number, scaleX: number, scaleY: number, alpha: number) => {
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+
+  // 2. Load the realistic generated daytime mountain sky image
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+
+  const renderImageOntoCanvas = () => {
+    // Fill background with realistic sky gradient
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, width, height);
+
+    // Place photorealistic mountains across the 360 horizon:
+    // Render 2 panels (Panel 1 normal, Panel 2 mirrored horizontally)
+    // for mathematical 100% seamless continuity with zero seam lines.
+    const panelWidth = width / 2; // 1024px each
+    // Position mountains along eye-level horizon (y = 160 to 880)
+    const drawY = 160;
+    const drawHeight = 720;
+
+    // Panel 1: Left 180 degrees
+    ctx.drawImage(img, 0, drawY, panelWidth, drawHeight);
+
+    // Panel 2: Right 180 degrees (mirrored horizontally for seamless 360 loop)
     ctx.save();
-    ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
-    ctx.filter = 'blur(4px)';
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, scaleX, scaleY, 0, 0, Math.PI * 2);
-    ctx.ellipse(cx - scaleX * 0.45, cy + scaleY * 0.1, scaleX * 0.7, scaleY * 0.7, 0, 0, Math.PI * 2);
-    ctx.ellipse(cx + scaleX * 0.45, cy + scaleY * 0.15, scaleX * 0.65, scaleY * 0.65, 0, 0, Math.PI * 2);
-    ctx.ellipse(cx + scaleX * 0.15, cy - scaleY * 0.25, scaleX * 0.6, scaleY * 0.6, 0, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.translate(width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(img, 0, drawY, panelWidth, drawHeight);
     ctx.restore();
+
+    // Soft atmospheric feather at the top of the mountains into the upper sky
+    const topFeather = ctx.createLinearGradient(0, drawY, 0, drawY + 80);
+    topFeather.addColorStop(0, '#4a82c4');
+    topFeather.addColorStop(0.3, 'rgba(74, 130, 196, 0.45)');
+    topFeather.addColorStop(1, 'rgba(74, 130, 196, 0.0)');
+    ctx.fillStyle = topFeather;
+    ctx.fillRect(0, drawY, width, 80);
+
+    // Smooth gradient blend at the bottom into the battlefield horizon fog (#9ec0de)
+    const bottomFeather = ctx.createLinearGradient(0, drawY + drawHeight - 140, 0, height);
+    bottomFeather.addColorStop(0, 'rgba(158, 192, 222, 0.0)');
+    bottomFeather.addColorStop(0.65, 'rgba(158, 192, 222, 0.7)');
+    bottomFeather.addColorStop(1, '#9ec0de');
+    ctx.fillStyle = bottomFeather;
+    ctx.fillRect(0, drawY + drawHeight - 140, width, height - (drawY + drawHeight - 140));
+
+    texture.needsUpdate = true;
   };
 
-  for (let c = 0; c < 18; c++) {
-    const cx = (c / 18) * width + (Math.sin(c * 99) * 40);
-    const cy = height * 0.18 + Math.sin(c * 3.7) * 90;
-    const sx = 90 + (c % 5) * 22;
-    const sy = 34 + (c % 3) * 12;
-    drawCloud(cx, cy, sx, sy, 0.72);
-  }
+  img.onload = renderImageOntoCanvas;
+  img.onerror = () => {
+    // If bundled asset failed, try static fallback
+    if (img.src !== window.location.origin + '/textures/mountain_sky_day.jpg') {
+      img.src = '/textures/mountain_sky_day.jpg';
+    }
+  };
+  img.src = daySkyUrl;
 
-  // 3. Layer 1: Distant Towering Blue-Grey Mountain Peaks (Far Horizon)
-  ctx.fillStyle = '#899bb0';
-  ctx.beginPath();
-  ctx.moveTo(0, height * 0.52);
-  for (let x = 0; x <= width; x += 10) {
-    const t = (x / width) * Math.PI * 8;
-    const peakY = height * 0.38 +
-      Math.sin(t) * 48 +
-      Math.sin(t * 2.3) * 28 +
-      Math.cos(t * 4.7) * 15;
-    ctx.lineTo(x, peakY);
-  }
-  ctx.lineTo(width, height * 0.55);
-  ctx.lineTo(0, height * 0.55);
-  ctx.closePath();
-  ctx.fill();
+  return texture;
+}
 
-  // Distant snow/limestone highlight on far peaks
-  ctx.fillStyle = 'rgba(235, 243, 252, 0.45)';
-  ctx.beginPath();
-  ctx.moveTo(0, height * 0.48);
-  for (let x = 0; x <= width; x += 15) {
-    const t = (x / width) * Math.PI * 8;
-    const peakY = height * 0.38 +
-      Math.sin(t) * 48 +
-      Math.sin(t * 2.3) * 28 +
-      Math.cos(t * 4.7) * 15;
-    ctx.lineTo(x, peakY + 6);
-  }
-  ctx.lineTo(width, height * 0.46);
-  ctx.lineTo(0, height * 0.46);
-  ctx.closePath();
-  ctx.fill();
+/**
+ * Creates a 360 NIGHT panorama texture using photorealistic nocturnal mountain photography.
+ * Composited onto a 360 canvas with mirrored panels for 100% seamless looping,
+ * atmospheric starfield, realistic moonlight, and deep nocturnal fog blending.
+ */
+export function create360NightPanoramaTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 2048;
+  canvas.height = 1024;
+  const ctx = canvas.getContext('2d')!;
 
-  // 4. Layer 2: Mid-distance Rugged Rocky Mountain Range (Ochre / Brown / Slate)
-  const mountainGrad = ctx.createLinearGradient(0, height * 0.35, 0, height * 0.6);
-  mountainGrad.addColorStop(0.0, '#786d5e'); // Sun-warmed rock
-  mountainGrad.addColorStop(0.5, '#635b4f'); // Mountain shadow
-  mountainGrad.addColorStop(1.0, '#535c47'); // Lower olive vegetation
-  ctx.fillStyle = mountainGrad;
-  ctx.beginPath();
-  ctx.moveTo(0, height * 0.58);
-  for (let x = 0; x <= width; x += 8) {
-    const t = (x / width) * Math.PI * 12;
-    const midY = height * 0.44 +
-      Math.sin(t) * 36 +
-      Math.cos(t * 1.8) * 22 +
-      Math.sin(t * 3.4) * 12;
-    ctx.lineTo(x, midY);
-  }
-  ctx.lineTo(width, height * 0.65);
-  ctx.lineTo(0, height * 0.65);
-  ctx.closePath();
-  ctx.fill();
+  const width = canvas.width;
+  const height = canvas.height;
 
-  // Mountain Rock Strata / Crevices
-  ctx.strokeStyle = 'rgba(45, 40, 34, 0.35)';
-  ctx.lineWidth = 2;
-  for (let i = 0; i < 60; i++) {
-    const sx = (i / 60) * width + Math.sin(i * 12) * 20;
-    const sy = height * 0.46 + Math.cos(i * 3.1) * 25;
+  // 1. Initial realistic nocturnal gradient (zenith inky dark to night horizon)
+  const nightSkyGrad = ctx.createLinearGradient(0, 0, 0, height);
+  nightSkyGrad.addColorStop(0.0, '#02040b'); // Inky zenith black-indigo
+  nightSkyGrad.addColorStop(0.35, '#050a1b'); // Nocturnal deep blue
+  nightSkyGrad.addColorStop(0.65, '#081228'); // Far mountain horizon
+  nightSkyGrad.addColorStop(0.85, '#0c1735'); // Atmospheric nocturnal haze
+  nightSkyGrad.addColorStop(1.0, '#0a1230'); // Night fog blend color
+  ctx.fillStyle = nightSkyGrad;
+  ctx.fillRect(0, 0, width, height);
+
+  // Faint celestial starfield in upper dome
+  const pseudoRandom = (seed: number) => {
+    const x = Math.sin(seed * 12.9898 + 78.233) * 43758.5453;
+    return x - Math.floor(x);
+  };
+  for (let i = 0; i < 280; i++) {
+    const sx = pseudoRandom(i * 3 + 1) * width;
+    const sy = Math.pow(pseudoRandom(i * 3 + 2), 1.6) * (height * 0.42);
+    const bright = 0.3 + pseudoRandom(i * 3 + 3) * 0.7;
+    const r = 0.5 + pseudoRandom(i * 5 + 1) * 1.2;
+    ctx.fillStyle = `rgba(220, 235, 255, ${bright})`;
     ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(sx + (i % 2 === 0 ? 18 : -18), sy + 35);
-    ctx.stroke();
-  }
-
-  // 5. Layer 3: Rolling Green & Earth Foothills (Directly matching Beach Head screenshots)
-  const foothillGrad = ctx.createLinearGradient(0, height * 0.5, 0, height * 0.85);
-  foothillGrad.addColorStop(0.0, '#66734c'); // Olive green ridge
-  foothillGrad.addColorStop(0.4, '#55693c'); // Rich grassy green
-  foothillGrad.addColorStop(0.8, '#787352'); // Earthy dry knoll
-  foothillGrad.addColorStop(1.0, '#4b5735'); // Deep pasture green
-  ctx.fillStyle = foothillGrad;
-  ctx.beginPath();
-  ctx.moveTo(0, height * 0.72);
-  for (let x = 0; x <= width; x += 6) {
-    const t = (x / width) * Math.PI * 6;
-    const hillY = height * 0.56 +
-      Math.sin(t) * 25 +
-      Math.sin(t * 2.5) * 15 +
-      Math.cos(t * 5.1) * 8;
-    ctx.lineTo(x, hillY);
-  }
-  ctx.lineTo(width, height);
-  ctx.lineTo(0, height);
-  ctx.closePath();
-  ctx.fill();
-
-  // Shrub / foliage speckles on foothills
-  ctx.fillStyle = 'rgba(34, 46, 24, 0.4)';
-  for (let s = 0; s < 250; s++) {
-    const bx = Math.random() * width;
-    const by = height * 0.62 + Math.random() * (height * 0.35);
-    const rad = 2 + Math.random() * 5;
-    ctx.beginPath();
-    ctx.arc(bx, by, rad, 0, Math.PI * 2);
+    ctx.arc(sx, sy, r, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -154,26 +148,141 @@ export function create360PanoramaTexture(): THREE.CanvasTexture {
   texture.wrapT = THREE.ClampToEdgeWrapping;
   texture.minFilter = THREE.LinearFilter;
   texture.magFilter = THREE.LinearFilter;
+
+  // 2. Load the realistic generated nighttime mountain sky image
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+
+  const renderNightImageOntoCanvas = () => {
+    // Fill base night sky
+    ctx.fillStyle = nightSkyGrad;
+    ctx.fillRect(0, 0, width, height);
+
+    // Re-draw starfield in upper sky
+    for (let i = 0; i < 320; i++) {
+      const sx = pseudoRandom(i * 3 + 1) * width;
+      const sy = Math.pow(pseudoRandom(i * 3 + 2), 1.6) * (height * 0.38);
+      const bright = 0.35 + pseudoRandom(i * 3 + 3) * 0.65;
+      const r = 0.5 + pseudoRandom(i * 5 + 1) * 1.2;
+      ctx.fillStyle = `rgba(220, 235, 255, ${bright})`;
+      ctx.beginPath();
+      ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Place photorealistic dark night mountains across the 360 horizon:
+    // Render 2 panels (Panel 1 normal, Panel 2 mirrored horizontally) for 100% seamless 360 loop
+    const panelWidth = width / 2;
+    const drawY = 160;
+    const drawHeight = 720;
+
+    // Panel 1: Left 180 degrees
+    ctx.drawImage(img, 0, drawY, panelWidth, drawHeight);
+
+    // Panel 2: Right 180 degrees (mirrored horizontally for seamless 360 loop)
+    ctx.save();
+    ctx.translate(width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(img, 0, drawY, panelWidth, drawHeight);
+    ctx.restore();
+
+    // Atmospheric feather at the top into the midnight zenith
+    const topFeather = ctx.createLinearGradient(0, drawY, 0, drawY + 80);
+    topFeather.addColorStop(0, '#050a1a');
+    topFeather.addColorStop(0.4, 'rgba(5, 10, 26, 0.45)');
+    topFeather.addColorStop(1, 'rgba(5, 10, 26, 0.0)');
+    ctx.fillStyle = topFeather;
+    ctx.fillRect(0, drawY, width, 80);
+
+    // Smooth gradient blend at the bottom into the nocturnal battlefield fog (#0a1230)
+    const bottomFeather = ctx.createLinearGradient(0, drawY + drawHeight - 140, 0, height);
+    bottomFeather.addColorStop(0, 'rgba(10, 18, 48, 0.0)');
+    bottomFeather.addColorStop(0.65, 'rgba(10, 18, 48, 0.7)');
+    bottomFeather.addColorStop(1, '#0a1230');
+    ctx.fillStyle = bottomFeather;
+    ctx.fillRect(0, drawY + drawHeight - 140, width, height - (drawY + drawHeight - 140));
+
+    texture.needsUpdate = true;
+  };
+
+  img.onload = renderNightImageOntoCanvas;
+  img.onerror = () => {
+    if (img.src !== window.location.origin + '/textures/mountain_sky_night.jpg') {
+      img.src = '/textures/mountain_sky_night.jpg';
+    }
+  };
+  img.src = nightSkyUrl;
+
   return texture;
 }
 
 /**
  * Creates the 360-degree panorama skydome enclosing the game world.
+ * Contains both Day and Night panorama meshes configured with depthWrite=false
+ * and deterministic renderOrder to enable ultra-smooth crossfading without artifacts.
  */
-export function create360PanoramaDome(): THREE.Mesh {
-  const texture = create360PanoramaTexture();
-  // Inverted sphere for panoramic 360 view
-  const domeGeo = new THREE.SphereGeometry(600, 32, 24);
-  const domeMat = new THREE.MeshBasicMaterial({
-    map: texture,
+export function create360PanoramaDome(): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'panorama_360_dome';
+  group.position.set(0, 40, 0);
+
+  const dayTexture = create360DayPanoramaTexture();
+  const nightTexture = create360NightPanoramaTexture();
+
+  // Outer Night Dome (radius 600, inverted sphere backdrop)
+  const nightGeo = new THREE.SphereGeometry(600, 48, 32);
+  const nightMat = new THREE.MeshBasicMaterial({
+    map: nightTexture,
     side: THREE.BackSide,
     fog: false,
+    depthWrite: false,
+    transparent: true,
+    opacity: 1.0,
   });
+  const nightMesh = new THREE.Mesh(nightGeo, nightMat);
+  nightMesh.name = 'panorama_night_mesh';
+  nightMesh.renderOrder = -2;
+  group.add(nightMesh);
 
-  const dome = new THREE.Mesh(domeGeo, domeMat);
-  dome.name = 'panorama_360_dome';
-  dome.position.set(0, 40, 0);
-  return dome;
+  // Inner Day Dome (radius 599.5, crossfades smoothly based on dayNightT)
+  const dayGeo = new THREE.SphereGeometry(599.5, 48, 32);
+  const dayMat = new THREE.MeshBasicMaterial({
+    map: dayTexture,
+    side: THREE.BackSide,
+    fog: false,
+    depthWrite: false,
+    transparent: true,
+    opacity: 1.0,
+  });
+  const dayMesh = new THREE.Mesh(dayGeo, dayMat);
+  dayMesh.name = 'panorama_day_mesh';
+  dayMesh.renderOrder = -1;
+  group.add(dayMesh);
+
+  return group;
+}
+
+/**
+ * Updates the day/night blend of the 360 mountain panorama dome.
+ * @param dome The panorama skydome group
+ * @param nightFactor 0 = full daytime, 1 = full nighttime
+ */
+export function updatePanoramaDayNight(dome: THREE.Object3D | null | undefined, nightFactor: number) {
+  if (!dome) return;
+  const k = Math.min(Math.max(nightFactor, 0), 1);
+  const dayMesh = dome.getObjectByName('panorama_day_mesh') as THREE.Mesh | undefined;
+  const nightMesh = dome.getObjectByName('panorama_night_mesh') as THREE.Mesh | undefined;
+
+  if (dayMesh && dayMesh.material) {
+    const mat = dayMesh.material as THREE.MeshBasicMaterial;
+    mat.opacity = 1.0 - k;
+    dayMesh.visible = mat.opacity > 0.002;
+  }
+  if (nightMesh && nightMesh.material) {
+    const mat = nightMesh.material as THREE.MeshBasicMaterial;
+    mat.opacity = 1.0;
+    nightMesh.visible = k > 0.002 || !dayMesh;
+  }
 }
 
 /**
