@@ -774,22 +774,62 @@ export class GameEngine {
     this.switchWeapon(next);
   }
 
-  // DEV/test: immediately clear the wave and start the next one
-  public skipToNextWave() {
+  // Clear all enemies, enemy projectiles, and active combat threats from the battlefield
+  public clearAllEnemies() {
     for (const e of this.enemies) {
-      if (!e.dead) {
-        e.dead = true;
+      if (e.meshGroup) {
         this.scene.remove(e.meshGroup);
       }
     }
-    this.enemies = this.enemies.filter((e) => !e.dead);
-    this.supplyDrops.forEach((sd) => this.scene.remove(sd.meshGroup));
-    this.supplyDrops = [];
-    this.projectiles.forEach((p) => this.scene.remove(p.mesh));
+    this.enemies = [];
+
+    for (const p of this.projectiles) {
+      if (p.mesh) {
+        this.scene.remove(p.mesh);
+      }
+    }
     this.projectiles = [];
-    this.activeFlares.forEach((f) => this.scene.remove(f.meshGroup));
+
+    for (const f of this.activeFlares) {
+      if (f.meshGroup) {
+        this.scene.remove(f.meshGroup);
+      }
+    }
     this.activeFlares = [];
+
+    for (const sd of this.supplyDrops) {
+      if (sd.meshGroup) {
+        this.scene.remove(sd.meshGroup);
+      }
+    }
+    this.supplyDrops = [];
+
+    for (const jet of this.alliedJets) {
+      if (jet.group) {
+        this.scene.remove(jet.group);
+      }
+    }
+    this.alliedJets = [];
+
+    for (const f of this.floaters) {
+      if (f.sprite) {
+        this.scene.remove(f.sprite);
+      }
+    }
+    this.floaters = [];
+
     this.echelons = [];
+    this.stats.activeThreats = 0;
+    this.stats.remainingWaveEnemies = 0;
+    this.screenShake = 0;
+    this.isFiring = false;
+
+    if (this.onStatsUpdate) this.onStatsUpdate(this.stats);
+  }
+
+  // DEV/test: immediately clear the wave and start the next one
+  public skipToNextWave() {
+    this.clearAllEnemies();
     this.startWave(this.stats.wave + 1);
   }
 
@@ -1647,6 +1687,9 @@ export class GameEngine {
 
   /* ================= ENEMY FACTORIES & SPAWNING ================= */
   public startWave(waveNum: number) {
+    // Clear any residual combat threats from previous wave or state
+    this.clearAllEnemies();
+
     this.gameState = 'playing';
     this.stats.wave = waveNum;
     this.stats.difficulty = this.difficulty;
@@ -1659,22 +1702,51 @@ export class GameEngine {
     const diff = DIFFICULTY_SETTINGS[this.difficulty];
 
     // Configure wave composition scaled by difficulty
-    const baseSoldiers = 6 + waveNum * 3;
-    const baseTanks = Math.floor(waveNum * 1.2);
-    const baseAPCs = Math.floor(waveNum * 0.8) + (waveNum >= 2 ? 1 : 0);
-    const baseHelis = Math.max(1, Math.floor(waveNum * 0.8));
-    const baseAirborne = Math.max(1, Math.floor(waveNum * 0.7));
-    // Jets & cargo planes appear early so they're actually experienced
-    const baseJets = waveNum >= 3 ? Math.floor((waveNum - 1) * 0.6) : 0;
-    const baseCargoPlanes = waveNum >= 3 ? Math.floor((waveNum - 1) * 0.4) : 0;
+    let soldiersCount = 0;
+    let tanksCount = 0;
+    let apcsCount = 0;
+    let helicoptersCount = 0;
+    let airborneDropsCount = 0;
+    let jetsCount = 0;
+    let cargoPlanesCount = 0;
 
-    const soldiersCount = Math.max(3, Math.round(baseSoldiers * diff.countMult));
-    const tanksCount = Math.round(baseTanks * diff.countMult);
-    const apcsCount = Math.max(waveNum >= 2 ? 1 : 0, Math.round(baseAPCs * diff.countMult));
-    const helicoptersCount = Math.max(waveNum >= 2 ? 1 : 0, Math.round(baseHelis * diff.countMult));
-    const airborneDropsCount = Math.max(1, Math.round(baseAirborne * diff.countMult));
-    const jetsCount = Math.round(baseJets * diff.countMult);
-    const cargoPlanesCount = Math.round(baseCargoPlanes * diff.countMult);
+    if (waveNum === 1) {
+      // Gentle introductory wave for beginners (even on hard mode, starts slow & light)
+      // Pure infantry scouts so players can learn gun handling and leading shots
+      soldiersCount = this.difficulty === 'easy' ? 3 : this.difficulty === 'medium' ? 4 : 5;
+      tanksCount = 0;
+      apcsCount = 0;
+      helicoptersCount = 0;
+      airborneDropsCount = 0;
+      jetsCount = 0;
+      cargoPlanesCount = 0;
+    } else if (waveNum === 2) {
+      // Wave 2: Introduce a few more infantry and first airborne drops
+      soldiersCount = Math.max(4, Math.round(6 * diff.countMult));
+      airborneDropsCount = Math.max(1, Math.round(2 * diff.countMult));
+      tanksCount = this.difficulty === 'hard' ? 1 : 0;
+      apcsCount = 0;
+      helicoptersCount = 0;
+      jetsCount = 0;
+      cargoPlanesCount = 0;
+    } else {
+      // Wave 3+: Combined arms assault
+      const baseSoldiers = 5 + waveNum * 2.5;
+      const baseTanks = Math.max(0, Math.floor((waveNum - 1) * 0.9));
+      const baseAPCs = Math.max(0, Math.floor((waveNum - 2) * 0.7));
+      const baseHelis = Math.max(1, Math.floor((waveNum - 2) * 0.8));
+      const baseAirborne = Math.max(1, Math.floor(waveNum * 0.7));
+      const baseJets = waveNum >= 4 ? Math.floor((waveNum - 2) * 0.5) : 0;
+      const baseCargoPlanes = waveNum >= 4 ? Math.floor((waveNum - 2) * 0.4) : 0;
+
+      soldiersCount = Math.max(3, Math.round(baseSoldiers * diff.countMult));
+      tanksCount = Math.round(baseTanks * diff.countMult);
+      apcsCount = Math.round(baseAPCs * diff.countMult);
+      helicoptersCount = Math.round(baseHelis * diff.countMult);
+      airborneDropsCount = Math.round(baseAirborne * diff.countMult);
+      jetsCount = Math.round(baseJets * diff.countMult);
+      cargoPlanesCount = Math.round(baseCargoPlanes * diff.countMult);
+    }
 
     this.currentWaveConfig = {
       waveNumber: waveNum,
@@ -1694,42 +1766,57 @@ export class GameEngine {
     this.stats.airstrikesAvailable = Math.min(3, (this.stats.airstrikesAvailable || 0) + 1);
 
     // Staggered Tactical Echelons (DO NOT deploy all at once!)
-    // Echelon 1: Vanguard Scouts (Light reconnaissance squad & paratroopers)
     const ech1: EnemyType[] = [];
-    const ech1Soldiers = Math.max(2, Math.floor(soldiersCount * 0.35));
-    const ech1Airborne = Math.max(1, Math.floor(airborneDropsCount * 0.5));
-    for (let i = 0; i < ech1Soldiers; i++) ech1.push('soldier');
-    for (let i = 0; i < ech1Airborne; i++) ech1.push('paratrooper');
-    if (apcsCount > 1 && waveNum >= 2) ech1.push('apc');
-    this.shuffleArray(ech1);
-
-    // Echelon 2: Armored Ground Column (Heavy tanks & APCs advancing under rifle fire)
     const ech2: EnemyType[] = [];
-    const ech2Tanks = Math.max(tanksCount > 0 ? 1 : 0, Math.floor(tanksCount * 0.6));
-    const ech2APCs = Math.max(apcsCount > 0 ? 1 : 0, Math.floor(apcsCount * 0.6));
-    const ech2Soldiers = Math.max(2, Math.floor(soldiersCount * 0.35));
-    for (let i = 0; i < ech2Tanks; i++) ech2.push('tank');
-    for (let i = 0; i < ech2APCs; i++) ech2.push('apc');
-    for (let i = 0; i < ech2Soldiers; i++) ech2.push('soldier');
-    if (helicoptersCount > 1 && waveNum >= 3) ech2.push('helicopter');
-    this.shuffleArray(ech2);
-
-    // Echelon 3: Heavy Air Strike & Combined Assault (Gunships, remaining armor & infantry)
     const ech3: EnemyType[] = [];
-    const remSoldiers = Math.max(0, soldiersCount - ech1Soldiers - ech2Soldiers);
-    const remTanks = Math.max(0, tanksCount - ech2Tanks);
-    const remAPCs = Math.max(0, apcsCount - (ech1.includes('apc') ? 1 : 0) - ech2APCs);
-    const remHelis = Math.max(0, helicoptersCount - (ech2.includes('helicopter') ? 1 : 0));
-    const remAirborne = Math.max(0, airborneDropsCount - ech1Airborne);
 
-    for (let i = 0; i < remSoldiers; i++) ech3.push('soldier');
-    for (let i = 0; i < remTanks; i++) ech3.push('tank');
-    for (let i = 0; i < remAPCs; i++) ech3.push('apc');
-    for (let i = 0; i < remHelis; i++) ech3.push('helicopter');
-    for (let i = 0; i < remAirborne; i++) ech3.push('paratrooper');
-    for (let i = 0; i < jetsCount; i++) ech3.push('jet');
-    for (let i = 0; i < cargoPlanesCount; i++) ech3.push('transport_plane');
-    this.shuffleArray(ech3);
+    if (waveNum === 1) {
+      // Echelon 1: 1-2 scout soldiers
+      const firstSquad = Math.min(2, Math.max(1, Math.floor(soldiersCount * 0.35)));
+      for (let i = 0; i < firstSquad; i++) ech1.push('soldier');
+
+      // Echelon 2: 1-2 soldiers
+      const secondSquad = Math.min(2, Math.max(1, Math.floor((soldiersCount - firstSquad) * 0.5)));
+      for (let i = 0; i < secondSquad; i++) ech2.push('soldier');
+
+      // Echelon 3: Remaining soldiers
+      const rem = Math.max(1, soldiersCount - firstSquad - secondSquad);
+      for (let i = 0; i < rem; i++) ech3.push('soldier');
+    } else {
+      // Echelon 1: Vanguard Scouts (Light reconnaissance squad & paratroopers)
+      const ech1Soldiers = Math.max(2, Math.floor(soldiersCount * 0.35));
+      const ech1Airborne = Math.max(1, Math.floor(airborneDropsCount * 0.5));
+      for (let i = 0; i < ech1Soldiers; i++) ech1.push('soldier');
+      for (let i = 0; i < ech1Airborne; i++) ech1.push('paratrooper');
+      if (apcsCount > 1 && waveNum >= 2) ech1.push('apc');
+      this.shuffleArray(ech1);
+
+      // Echelon 2: Armored Ground Column (Heavy tanks & APCs advancing under rifle fire)
+      const ech2Tanks = Math.max(tanksCount > 0 ? 1 : 0, Math.floor(tanksCount * 0.6));
+      const ech2APCs = Math.max(apcsCount > 0 ? 1 : 0, Math.floor(apcsCount * 0.6));
+      const ech2Soldiers = Math.max(2, Math.floor(soldiersCount * 0.35));
+      for (let i = 0; i < ech2Tanks; i++) ech2.push('tank');
+      for (let i = 0; i < ech2APCs; i++) ech2.push('apc');
+      for (let i = 0; i < ech2Soldiers; i++) ech2.push('soldier');
+      if (helicoptersCount > 1 && waveNum >= 3) ech2.push('helicopter');
+      this.shuffleArray(ech2);
+
+      // Echelon 3: Heavy Air Strike & Combined Assault (Gunships, remaining armor & infantry)
+      const remSoldiers = Math.max(0, soldiersCount - ech1Soldiers - ech2Soldiers);
+      const remTanks = Math.max(0, tanksCount - ech2Tanks);
+      const remAPCs = Math.max(0, apcsCount - (ech1.includes('apc') ? 1 : 0) - ech2APCs);
+      const remHelis = Math.max(0, helicoptersCount - (ech2.includes('helicopter') ? 1 : 0));
+      const remAirborne = Math.max(0, airborneDropsCount - ech1Airborne);
+
+      for (let i = 0; i < remSoldiers; i++) ech3.push('soldier');
+      for (let i = 0; i < remTanks; i++) ech3.push('tank');
+      for (let i = 0; i < remAPCs; i++) ech3.push('apc');
+      for (let i = 0; i < remHelis; i++) ech3.push('helicopter');
+      for (let i = 0; i < remAirborne; i++) ech3.push('paratrooper');
+      for (let i = 0; i < jetsCount; i++) ech3.push('jet');
+      for (let i = 0; i < cargoPlanesCount; i++) ech3.push('transport_plane');
+      this.shuffleArray(ech3);
+    }
 
     this.echelons = [
       { name: 'Vanguard Scouts', queue: ech1 },
@@ -1740,7 +1827,9 @@ export class GameEngine {
     this.currentEchelonIndex = 0;
     this.stats.currentEchelon = 1;
     this.stats.totalEchelons = 3;
-    this.lastSpawnTime = performance.now() - 3000;
+    // Wave 1 gives a generous startup delay before first enemy appears,
+    // so beginners can inspect the viewport, orient the turret, and aim comfortably.
+    this.lastSpawnTime = waveNum === 1 ? performance.now() + 2800 : performance.now();
     this.echelonPauseTimer = 0;
     this.waveClearTimer = 0;
     this.waveDamageTaken = false;
@@ -1764,8 +1853,10 @@ export class GameEngine {
       spawnX = Math.sin(heliAngle) * heliDist;
       spawnZ = Math.cos(heliAngle) * heliDist;
     } else if (type === 'soldier') {
-      // Flanking mountain infantry squads advance from all surrounding sectors
-      const soldierAngle = (Math.random() - 0.5) * 3.6;
+      // Flanking mountain infantry squads advance from all surrounding sectors.
+      // On Wave 1: confine to frontal field of view so beginners don't get blindsided
+      const angleSpread = this.stats.wave === 1 ? 1.4 : 3.6;
+      const soldierAngle = (Math.random() - 0.5) * angleSpread;
       const dist = 150 + Math.random() * 55;
       spawnX = Math.sin(soldierAngle) * dist;
       spawnZ = Math.cos(soldierAngle) * dist;
@@ -1790,33 +1881,39 @@ export class GameEngine {
 
       const soldierHp = Math.round(20 * hpMult);
       const engageDist = 45 + Math.random() * 50; // engage from afar, don't storm the bunker
-      this.enemies.push({
-        id: this.nextEntityId++,
-        type: 'soldier',
-        meshGroup: group,
-        position: { x: spawnX, y: groundY, z: spawnZ },
-        velocity: { x: 0, y: 0, z: 0 },
-        hp: soldierHp,
-        maxHp: soldierHp,
-        speed: (3.4 + Math.random() * 1.0) * ws.speedMult,
-        scoreValue: 75,
-        hitRadius: 1.8,
-        dead: false,
-        state: 'advancing',
-        stateTimer: 0,
-        fireCooldown: (3.0 + Math.random() * 2.5) * diff.fireCooldownMult,
-        lastFireTime: performance.now(),
-        runCycleOffset: Math.random() * 10,
-        leftLeg,
-        rightLeg,
-        turretMesh: leftLeg,
-        cannonMesh: rightLeg,
-        proneTimer: 0,
-        prone: false,
-        coverDir: Math.random() * Math.PI * 2,
-        engageDist,
-        baseScale,
-      });
+        // On Wave 1: march slightly slower with relaxed fire rate for beginner accessibility
+        const wave1SpeedMult = this.stats.wave === 1 ? 0.72 : 1.0;
+        const soldierFireCooldown = this.stats.wave === 1
+          ? (5.0 + Math.random() * 3.0) * diff.fireCooldownMult
+          : (3.0 + Math.random() * 2.5) * diff.fireCooldownMult;
+
+        this.enemies.push({
+          id: this.nextEntityId++,
+          type: 'soldier',
+          meshGroup: group,
+          position: { x: spawnX, y: groundY, z: spawnZ },
+          velocity: { x: 0, y: 0, z: 0 },
+          hp: soldierHp,
+          maxHp: soldierHp,
+          speed: (3.4 + Math.random() * 1.0) * ws.speedMult * wave1SpeedMult,
+          scoreValue: 75,
+          hitRadius: 1.8,
+          dead: false,
+          state: 'advancing',
+          stateTimer: 0,
+          fireCooldown: soldierFireCooldown,
+          lastFireTime: performance.now(),
+          runCycleOffset: Math.random() * 10,
+          leftLeg,
+          rightLeg,
+          turretMesh: leftLeg,
+          cannonMesh: rightLeg,
+          proneTimer: 0,
+          prone: false,
+          coverDir: Math.random() * Math.PI * 2,
+          engageDist,
+          baseScale,
+        });
 
     } else if (type === 'apc') {
       const { group, turret, cannon, wheels } = createAPCModel();
@@ -2027,12 +2124,23 @@ export class GameEngine {
     const now = performance.now();
     const currentEch = this.echelons[this.currentEchelonIndex];
 
+    // Wave 1 slow-paced safety limits (slow and friendly for newcomers even on hard mode)
+    const maxConcurrent = this.stats.wave === 1
+      ? (this.difficulty === 'hard' ? 3 : 2)
+      : diff.maxConcurrent;
+    const minSpawnInterval = this.stats.wave === 1
+      ? (this.difficulty === 'hard' ? 3.8 : this.difficulty === 'medium' ? 4.8 : 6.0)
+      : diff.minSpawnInterval;
+    const subWavePause = this.stats.wave === 1
+      ? diff.subWavePause + 2.0
+      : diff.subWavePause;
+
     if (currentEch && currentEch.queue.length > 0) {
       // Don't deploy all at once:
       // 1. Concurrency limit: Do not spawn if battlefield already has maxConcurrent alive enemies
       // 2. Interval pacing: Wait at least minSpawnInterval seconds between unit deployments
-      if (aliveEnemies.length < diff.maxConcurrent) {
-        if ((now - this.lastSpawnTime) / 1000 >= diff.minSpawnInterval) {
+      if (aliveEnemies.length < maxConcurrent) {
+        if ((now - this.lastSpawnTime) / 1000 >= minSpawnInterval) {
           const nextType = currentEch.queue.shift();
           if (nextType) {
             this.spawnEnemy(nextType);
@@ -2043,14 +2151,17 @@ export class GameEngine {
       }
     } else if (this.currentEchelonIndex < this.echelons.length - 1) {
       // Current echelon queue is empty.
-      // Transition to next echelon when active units are down to <= 2
-      // OR after subWavePause breather has elapsed.
+      // On wave 1: Wait until all current active threats are eliminated before next squad deploys
       this.echelonPauseTimer += dt;
-      if (aliveEnemies.length <= 2 || this.echelonPauseTimer >= diff.subWavePause) {
+      const allowNextEchelon = this.stats.wave === 1
+        ? (aliveEnemies.length === 0 || this.echelonPauseTimer >= subWavePause)
+        : (aliveEnemies.length <= 2 || this.echelonPauseTimer >= subWavePause);
+
+      if (allowNextEchelon) {
         this.currentEchelonIndex++;
         this.stats.currentEchelon = this.currentEchelonIndex + 1;
         this.echelonPauseTimer = 0;
-        this.lastSpawnTime = now - (diff.minSpawnInterval * 1000 - 600); // prompt initial spawn of next squad
+        this.lastSpawnTime = now - (minSpawnInterval * 1000 - (this.stats.wave === 1 ? 1200 : 600)); // prompt initial spawn of next squad
         soundManager.playWaveHorn();
         if (this.onStatsUpdate) this.onStatsUpdate(this.stats);
       }
@@ -3088,11 +3199,8 @@ export class GameEngine {
     soundManager.playExplosion('large');
     this.createExplosion(0, 1.8, 0, 'large');
 
-    // Clean up so a redeploy starts fresh
-    for (const sd of this.supplyDrops) this.scene.remove(sd.meshGroup);
-    this.supplyDrops = [];
-    for (const jet of this.alliedJets) this.scene.remove(jet.group);
-    this.alliedJets = [];
+    // On death: clear all enemies, projectiles, and active combat threats from the battlefield
+    this.clearAllEnemies();
 
     // Persist high score
     if (this.stats.score > this.stats.highScore) {
@@ -3355,10 +3463,12 @@ export class GameEngine {
     }
 
     // Simulation updates
-    this.updateSpawning(dt);
-    this.updateEnemies(dt);
-    this.updateSupplyDrops(dt);
-    this.updateProjectiles(dt);
+    if (this.gameState !== 'game_over') {
+      this.updateSpawning(dt);
+      this.updateEnemies(dt);
+      this.updateSupplyDrops(dt);
+      this.updateProjectiles(dt);
+    }
     this.updateParticles(dt);
     this.updateFloaters(dt);
     this.updateRadarBlips();

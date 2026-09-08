@@ -25,23 +25,31 @@ function createStripedParachuteTexture(): THREE.CanvasTexture {
   return tex;
 }
 
-// Procedural Camouflage Texture for Tanks & APCs (organic multi-blotch camo)
-function createCamoTexture(base: string, dark: string, sand: string): THREE.CanvasTexture {
+// Procedural Camouflage & Armor Plate Texture for Tanks & APCs (with weld seams, hex bolts, scraped metal, and stencils)
+function createDetailedArmorTexture(base: string, dark: string, sand: string, stencilText: string = '★ B-42'): { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } {
   const canvas = document.createElement('canvas');
   canvas.width = 1024;
   canvas.height = 1024;
   const ctx = canvas.getContext('2d')!;
 
-  // Mottled base
+  // Height/bump map canvas for true surface relief
+  const bCanvas = document.createElement('canvas');
+  bCanvas.width = 512;
+  bCanvas.height = 512;
+  const bCtx = bCanvas.getContext('2d')!;
+  bCtx.fillStyle = '#808080'; // 50% neutral gray
+  bCtx.fillRect(0, 0, 512, 512);
+
+  // 1. Mottled camouflage base
   ctx.fillStyle = base;
   ctx.fillRect(0, 0, 1024, 1024);
   for (let i = 0; i < 900; i++) {
     const px = Math.random() * 1024;
     const py = Math.random() * 1024;
-    const pr = 8 + Math.random() * 30;
+    const pr = 8 + Math.random() * 32;
     const g = ctx.createRadialGradient(px, py, 0, px, py, pr);
     const shade = Math.random();
-    g.addColorStop(0, shade < 0.5 ? 'rgba(30,34,22,0.18)' : 'rgba(120,110,80,0.16)');
+    g.addColorStop(0, shade < 0.5 ? 'rgba(25,30,20,0.22)' : 'rgba(125,115,85,0.18)');
     g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g;
     ctx.beginPath();
@@ -49,7 +57,7 @@ function createCamoTexture(base: string, dark: string, sand: string): THREE.Canv
     ctx.fill();
   }
 
-  // Soft-edged dark camo blobs (three overlapping ellipses per blob for organic shape)
+  // 2. Organic military camouflage blotches
   const blob = (cx: number, cy: number, r: number, color: string, alpha: number) => {
     ctx.globalAlpha = alpha;
     ctx.fillStyle = color;
@@ -69,26 +77,733 @@ function createCamoTexture(base: string, dark: string, sand: string): THREE.Canv
     ctx.globalAlpha = 1;
   };
 
-  for (let i = 0; i < 46; i++) {
-    blob(Math.random() * 1024, Math.random() * 1024, 40 + Math.random() * 70, dark, 0.4);
+  for (let i = 0; i < 48; i++) {
+    blob(Math.random() * 1024, Math.random() * 1024, 45 + Math.random() * 75, dark, 0.45);
   }
-  for (let i = 0; i < 34; i++) {
-    blob(Math.random() * 1024, Math.random() * 1024, 28 + Math.random() * 50, sand, 0.32);
-  }
-  // Tiny dark flecks for bark/branch break-up
-  for (let i = 0; i < 400; i++) {
-    ctx.fillStyle = 'rgba(20,22,14,0.5)';
-    ctx.beginPath();
-    ctx.ellipse(Math.random() * 1024, Math.random() * 1024, 2 + Math.random() * 5, 1.4 + Math.random() * 3, Math.random() * Math.PI, 0, Math.PI * 2);
-    ctx.fill();
+  for (let i = 0; i < 36; i++) {
+    blob(Math.random() * 1024, Math.random() * 1024, 30 + Math.random() * 55, sand, 0.35);
   }
 
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(1.2, 1.2);
-  tex.anisotropy = 8;
-  return tex;
+  // 3. Structural armor plate seams & welded joints
+  const drawWeldedSeam = (y: number) => {
+    ctx.strokeStyle = 'rgba(15, 18, 12, 0.65)';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(1024, y);
+    ctx.stroke();
+
+    // Bump seam groove
+    const by = y / 2;
+    bCtx.strokeStyle = '#444444';
+    bCtx.lineWidth = 3;
+    bCtx.beginPath();
+    bCtx.moveTo(0, by);
+    bCtx.lineTo(512, by);
+    bCtx.stroke();
+
+    // Weld bead ripples
+    for (let x = 0; x < 1024; x += 8) {
+      ctx.fillStyle = 'rgba(180, 185, 160, 0.25)';
+      ctx.beginPath();
+      ctx.arc(x + (Math.random() - 0.5) * 2, y + (Math.random() - 0.5) * 2, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      bCtx.fillStyle = '#b0b0b0';
+      bCtx.beginPath();
+      bCtx.arc((x + (Math.random() - 0.5) * 2) / 2, by + (Math.random() - 0.5) * 1, 1.8, 0, Math.PI * 2);
+      bCtx.fill();
+    }
+  };
+
+  drawWeldedSeam(256);
+  drawWeldedSeam(512);
+  drawWeldedSeam(768);
+
+  // 4. Hex bolts and rivets along edge seams
+  const drawBolts = (y: number) => {
+    for (let x = 24; x < 1024; x += 64) {
+      // Drop shadow
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+      ctx.beginPath();
+      ctx.arc(x + 1.5, y + 1.5, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Bolt head
+      ctx.fillStyle = 'rgba(70, 75, 65, 0.9)';
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Top specular glint
+      ctx.fillStyle = 'rgba(230, 235, 220, 0.6)';
+      ctx.beginPath();
+      ctx.arc(x - 1, y - 1, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Bump bolt
+      const bx = x / 2;
+      const by = y / 2;
+      bCtx.fillStyle = '#e8e8e8';
+      bCtx.beginPath();
+      bCtx.arc(bx, by, 3, 0, Math.PI * 2);
+      bCtx.fill();
+    }
+  };
+
+  drawBolts(236);
+  drawBolts(492);
+  drawBolts(748);
+
+  // 5. Scratched paint and raw steel edge wear
+  for (let s = 0; s < 45; s++) {
+    const sx = Math.random() * 1024;
+    const sy = Math.random() * 1024;
+    const len = 12 + Math.random() * 36;
+    const ang = Math.random() * Math.PI * 2;
+    // Dark exposed primer
+    ctx.strokeStyle = 'rgba(15, 18, 14, 0.7)';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(sx + Math.cos(ang) * len, sy + Math.sin(ang) * len);
+    ctx.stroke();
+    // Raw bare steel highlight
+    ctx.strokeStyle = 'rgba(215, 225, 230, 0.55)';
+    ctx.lineWidth = 1.0;
+    ctx.beginPath();
+    ctx.moveTo(sx + 0.8, sy + 0.8);
+    ctx.lineTo(sx + 0.8 + Math.cos(ang) * len * 0.8, sy + 0.8 + Math.sin(ang) * len * 0.8);
+    ctx.stroke();
+  }
+
+  // 6. Tactical unit stencil marking
+  if (stencilText) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(235, 240, 220, 0.45)';
+    ctx.font = 'bold 36px monospace';
+    ctx.fillText(stencilText, 80, 180);
+    ctx.fillText(stencilText, 600, 440);
+    ctx.restore();
+  }
+
+  const map = new THREE.CanvasTexture(canvas);
+  map.wrapS = THREE.RepeatWrapping;
+  map.wrapT = THREE.RepeatWrapping;
+  map.anisotropy = 8;
+
+  const bumpMap = new THREE.CanvasTexture(bCanvas);
+  bumpMap.wrapS = THREE.RepeatWrapping;
+  bumpMap.wrapT = THREE.RepeatWrapping;
+  bumpMap.anisotropy = 8;
+
+  return { map, bumpMap };
+}
+
+// Procedural Tank Caterpillar Track Tread Texture with Chevron Cleats and Guide Horns
+function createTrackTreadTexture(): { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d')!;
+
+  const bCanvas = document.createElement('canvas');
+  bCanvas.width = 256;
+  bCanvas.height = 256;
+  const bCtx = bCanvas.getContext('2d')!;
+
+  // Dark steel track shoe background
+  ctx.fillStyle = '#1e2124';
+  ctx.fillRect(0, 0, 512, 512);
+  bCtx.fillStyle = '#505050';
+  bCtx.fillRect(0, 0, 256, 256);
+
+  // 16 track shoe segments along height
+  const shoeHeight = 32;
+  for (let y = 0; y < 512; y += shoeHeight) {
+    const by = y / 2;
+
+    // Segment separator groove (hinge pin cavity)
+    ctx.fillStyle = '#0e1012';
+    ctx.fillRect(0, y, 512, 4);
+    bCtx.fillStyle = '#202020';
+    bCtx.fillRect(0, by, 256, 2);
+
+    // End connector pins & guide teeth on edges
+    ctx.fillStyle = '#3a4045';
+    ctx.fillRect(10, y + 6, 28, 20);
+    ctx.fillRect(474, y + 6, 28, 20);
+    bCtx.fillStyle = '#a0a0a0';
+    bCtx.fillRect(5, by + 3, 14, 10);
+    bCtx.fillRect(237, by + 3, 14, 10);
+
+    // Pin center hex bolt
+    ctx.fillStyle = '#141618';
+    ctx.beginPath();
+    ctx.arc(24, y + 16, 4, 0, Math.PI * 2);
+    ctx.arc(488, y + 16, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Center dual V-chevron steel cleats
+    ctx.fillStyle = '#2c3236';
+    ctx.beginPath();
+    ctx.moveTo(256, y + 4);
+    ctx.lineTo(256, y + 14);
+    ctx.lineTo(100, y + 26);
+    ctx.lineTo(100, y + 16);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(256, y + 4);
+    ctx.lineTo(256, y + 14);
+    ctx.lineTo(412, y + 26);
+    ctx.lineTo(412, y + 16);
+    ctx.closePath();
+    ctx.fill();
+
+    // Chevron bump elevation
+    bCtx.fillStyle = '#e0e0e0';
+    bCtx.beginPath();
+    bCtx.moveTo(128, by + 2);
+    bCtx.lineTo(128, by + 7);
+    bCtx.lineTo(50, by + 13);
+    bCtx.lineTo(50, by + 8);
+    bCtx.closePath();
+    bCtx.fill();
+
+    bCtx.beginPath();
+    bCtx.moveTo(128, by + 2);
+    bCtx.lineTo(128, by + 7);
+    bCtx.lineTo(206, by + 13);
+    bCtx.lineTo(206, by + 8);
+    bCtx.closePath();
+    bCtx.fill();
+
+    // Scuffed bare steel on chevron contact peaks
+    ctx.fillStyle = 'rgba(210, 220, 230, 0.45)';
+    ctx.fillRect(140, y + 8, 232, 2);
+
+    // Center guide horn (tracks alignment tooth)
+    ctx.fillStyle = '#1a1d20';
+    ctx.fillRect(246, y + 8, 20, 16);
+    bCtx.fillStyle = '#ffffff';
+    bCtx.fillRect(123, by + 4, 10, 8);
+
+    // Grime & dirt in recessed channels
+    ctx.fillStyle = 'rgba(85, 75, 55, 0.35)';
+    ctx.fillRect(50, y + 18, 412, 6);
+  }
+
+  const map = new THREE.CanvasTexture(canvas);
+  map.wrapS = THREE.RepeatWrapping;
+  map.wrapT = THREE.RepeatWrapping;
+  map.repeat.set(1, 4);
+  map.anisotropy = 8;
+
+  const bumpMap = new THREE.CanvasTexture(bCanvas);
+  bumpMap.wrapS = THREE.RepeatWrapping;
+  bumpMap.wrapT = THREE.RepeatWrapping;
+  bumpMap.repeat.set(1, 4);
+  bumpMap.anisotropy = 8;
+
+  return { map, bumpMap };
+}
+
+// Procedural Military Off-Road Tire Tread Texture with Knobby Lugs and Sidewall Ribbing
+function createTireTreadTexture(): { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d')!;
+
+  const bCanvas = document.createElement('canvas');
+  bCanvas.width = 256;
+  bCanvas.height = 256;
+  const bCtx = bCanvas.getContext('2d')!;
+
+  // Deep matte tire rubber base
+  ctx.fillStyle = '#141617';
+  ctx.fillRect(0, 0, 512, 512);
+  bCtx.fillStyle = '#404040';
+  bCtx.fillRect(0, 0, 256, 256);
+
+  // Heavy staggered knobby traction lugs
+  const rows = 16;
+  const rh = 512 / rows;
+  for (let r = 0; r < rows; r++) {
+    const y = r * rh;
+    const by = y / 2;
+    const offset = (r % 2) * 48;
+
+    // Left tread block
+    ctx.fillStyle = '#222528';
+    ctx.fillRect(60 + offset, y + 4, 80, rh - 8);
+    // Right tread block
+    ctx.fillRect(280 + offset, y + 4, 80, rh - 8);
+
+    // Bump relief
+    bCtx.fillStyle = '#d0d0d0';
+    bCtx.fillRect((60 + offset) / 2, by + 2, 40, rh / 2 - 4);
+    bCtx.fillRect((280 + offset) / 2, by + 2, 40, rh / 2 - 4);
+
+    // Sipes (micro-slits inside each lug)
+    ctx.strokeStyle = '#121415';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(70 + offset, y + rh / 2);
+    ctx.lineTo(130 + offset, y + rh / 2);
+    ctx.moveTo(290 + offset, y + rh / 2);
+    ctx.lineTo(350 + offset, y + rh / 2);
+    ctx.stroke();
+
+    // Road dirt dusting in tread grooves
+    ctx.fillStyle = 'rgba(110, 98, 75, 0.22)';
+    ctx.fillRect(0, y, 512, 4);
+  }
+
+  // Sidewall manufacturer lettering
+  ctx.fillStyle = 'rgba(180, 185, 175, 0.35)';
+  ctx.font = 'bold 16px sans-serif';
+  ctx.fillText('MIL-SPEC 14.00-R20 TACTICAL', 80, 24);
+  ctx.fillText('ALL-TERRAIN RUN-FLAT', 120, 280);
+
+  const map = new THREE.CanvasTexture(canvas);
+  map.wrapS = THREE.RepeatWrapping;
+  map.wrapT = THREE.RepeatWrapping;
+  map.repeat.set(1, 3);
+  map.anisotropy = 8;
+
+  const bumpMap = new THREE.CanvasTexture(bCanvas);
+  bumpMap.wrapS = THREE.RepeatWrapping;
+  bumpMap.wrapT = THREE.RepeatWrapping;
+  bumpMap.repeat.set(1, 3);
+  bumpMap.anisotropy = 8;
+
+  return { map, bumpMap };
+}
+
+// Procedural Fighter Jet Fuselage Texture with Riveted Aluminum Panels, Stencils & Roundels
+function createJetFuselageTexture(isEnemy: boolean = false): { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d')!;
+
+  const bCanvas = document.createElement('canvas');
+  bCanvas.width = 512;
+  bCanvas.height = 256;
+  const bCtx = bCanvas.getContext('2d')!;
+
+  // Base aeronautical coat: Air-superiority ghost gray or hostile stealth slate
+  ctx.fillStyle = isEnemy ? '#252e27' : '#576169';
+  ctx.fillRect(0, 0, 1024, 512);
+  bCtx.fillStyle = '#808080';
+  bCtx.fillRect(0, 0, 512, 256);
+
+  // Subtle brushed aerodynamic metal grain
+  for (let i = 0; i < 1800; i++) {
+    const x = Math.random() * 1024;
+    const y = Math.random() * 512;
+    ctx.fillStyle = `rgba(255, 255, 255, ${Math.random() * 0.04})`;
+    ctx.fillRect(x, y, 12 + Math.random() * 32, 1);
+  }
+
+  // Panel lines (fuselage bulkheads & wing control surfaces)
+  const drawPanelLine = (x1: number, y1: number, x2: number, y2: number) => {
+    ctx.strokeStyle = isEnemy ? 'rgba(10, 15, 12, 0.8)' : 'rgba(30, 36, 42, 0.7)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+
+    bCtx.strokeStyle = '#404040';
+    bCtx.lineWidth = 1.5;
+    bCtx.beginPath();
+    bCtx.moveTo(x1 / 2, y1 / 2);
+    bCtx.lineTo(x2 / 2, y2 / 2);
+    bCtx.stroke();
+  };
+
+  for (let x = 64; x < 1024; x += 128) {
+    drawPanelLine(x, 0, x, 512);
+  }
+  for (let y = 64; y < 512; y += 96) {
+    drawPanelLine(0, y, 1024, y);
+  }
+
+  // Flush countersunk aeronautical rivets
+  const drawRivetLine = (x: number, y1: number, y2: number) => {
+    for (let y = y1 + 8; y < y2; y += 16) {
+      // Rivet body
+      ctx.fillStyle = isEnemy ? 'rgba(12, 16, 12, 0.85)' : 'rgba(40, 48, 54, 0.8)';
+      ctx.beginPath();
+      ctx.arc(x, y, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+      // Rivet reflection
+      ctx.fillStyle = 'rgba(235, 245, 255, 0.35)';
+      ctx.beginPath();
+      ctx.arc(x - 0.6, y - 0.6, 0.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      bCtx.fillStyle = '#b8b8b8';
+      bCtx.beginPath();
+      bCtx.arc(x / 2, y / 2, 1.2, 0, Math.PI * 2);
+      bCtx.fill();
+    }
+  };
+
+  for (let x = 64; x < 1024; x += 128) {
+    drawRivetLine(x - 6, 0, 512);
+    drawRivetLine(x + 6, 0, 512);
+  }
+
+  // Black anti-glare nose cone segment
+  ctx.fillStyle = '#181b1d';
+  ctx.fillRect(860, 160, 164, 192);
+
+  // Stenciled warning signs ("NO STEP", jet intake warning)
+  ctx.save();
+  ctx.font = 'bold 14px monospace';
+  ctx.fillStyle = isEnemy ? '#e11d48' : '#eab308';
+  ctx.fillText('NO STEP ▲', 120, 100);
+  ctx.fillText('NO STEP ▲', 120, 420);
+  ctx.fillText('DANGER: JET INTAKE ►', 520, 140);
+  ctx.fillText('DANGER: JET INTAKE ►', 520, 380);
+
+  // Stenciled callsign / serial
+  ctx.fillStyle = isEnemy ? 'rgba(239, 68, 68, 0.85)' : 'rgba(240, 245, 250, 0.85)';
+  ctx.font = 'bold 28px monospace';
+  ctx.fillText(isEnemy ? 'RED-09' : 'AF-704', 320, 260);
+
+  // National roundel emblem
+  const rx = 220;
+  const ry = 256;
+  if (!isEnemy) {
+    // Allied Star Roundel (Navy/USAF style)
+    ctx.fillStyle = '#1e3a8a';
+    ctx.beginPath();
+    ctx.arc(rx, ry, 42, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#f8fafc';
+    ctx.beginPath();
+    ctx.arc(rx, ry, 26, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#dc2626';
+    ctx.beginPath();
+    ctx.arc(rx, ry, 12, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    // Enemy Aggressor Red Star / Tactical Chevron
+    ctx.fillStyle = '#991b1b';
+    ctx.beginPath();
+    ctx.arc(rx, ry, 40, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#0f172a';
+    ctx.beginPath();
+    ctx.arc(rx, ry, 28, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#dc2626';
+    ctx.beginPath();
+    ctx.arc(rx, ry, 14, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  const map = new THREE.CanvasTexture(canvas);
+  map.wrapS = THREE.RepeatWrapping;
+  map.wrapT = THREE.RepeatWrapping;
+  map.anisotropy = 8;
+
+  const bumpMap = new THREE.CanvasTexture(bCanvas);
+  bumpMap.wrapS = THREE.RepeatWrapping;
+  bumpMap.wrapT = THREE.RepeatWrapping;
+  bumpMap.anisotropy = 8;
+
+  return { map, bumpMap };
+}
+
+// Procedural Attack Helicopter Fuselage Texture with Rivets, Turbine Soot, and Hazard Stripes
+function createHelicopterFuselageTexture(): { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d')!;
+
+  const bCanvas = document.createElement('canvas');
+  bCanvas.width = 512;
+  bCanvas.height = 256;
+  const bCtx = bCanvas.getContext('2d')!;
+
+  // Dark military gunship green/steel base
+  ctx.fillStyle = '#2a3528';
+  ctx.fillRect(0, 0, 1024, 512);
+  bCtx.fillStyle = '#808080';
+  bCtx.fillRect(0, 0, 512, 256);
+
+  // Riveted panel grids
+  ctx.strokeStyle = '#182016';
+  ctx.lineWidth = 2;
+  for (let x = 80; x < 1024; x += 110) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, 512);
+    ctx.stroke();
+
+    bCtx.strokeStyle = '#404040';
+    bCtx.lineWidth = 1.5;
+    bCtx.beginPath();
+    bCtx.moveTo(x / 2, 0);
+    bCtx.lineTo(x / 2, 256);
+    bCtx.stroke();
+
+    // Rivet dots
+    for (let y = 8; y < 512; y += 18) {
+      ctx.fillStyle = 'rgba(10, 15, 10, 0.8)';
+      ctx.beginPath();
+      ctx.arc(x + 4, y, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      bCtx.fillStyle = '#c0c0c0';
+      bCtx.beginPath();
+      bCtx.arc((x + 4) / 2, y / 2, 1.2, 0, Math.PI * 2);
+      bCtx.fill();
+    }
+  }
+
+  // Turbine exhaust carbon soot gradient
+  const sootGrad = ctx.createLinearGradient(400, 0, 650, 0);
+  sootGrad.addColorStop(0, 'rgba(15, 15, 12, 0.85)');
+  sootGrad.addColorStop(0.6, 'rgba(40, 30, 20, 0.4)');
+  sootGrad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = sootGrad;
+  ctx.fillRect(400, 60, 250, 120);
+
+  // Yellow & black diagonal hazard stripes on tail section
+  for (let x = 0; x < 240; x += 36) {
+    ctx.fillStyle = '#eab308';
+    ctx.fillRect(x, 200, 18, 120);
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(x + 18, 200, 18, 120);
+  }
+
+  // Caution stencil
+  ctx.save();
+  ctx.font = 'bold 16px monospace';
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillText('KEEP AWAY ◄', 60, 190);
+  ctx.fillStyle = '#ef4444';
+  ctx.fillText('RESCUE →', 780, 260);
+  ctx.restore();
+
+  const map = new THREE.CanvasTexture(canvas);
+  map.wrapS = THREE.RepeatWrapping;
+  map.wrapT = THREE.RepeatWrapping;
+  map.anisotropy = 8;
+
+  const bumpMap = new THREE.CanvasTexture(bCanvas);
+  bumpMap.wrapS = THREE.RepeatWrapping;
+  bumpMap.wrapT = THREE.RepeatWrapping;
+  bumpMap.anisotropy = 8;
+
+  return { map, bumpMap };
+}
+
+// Procedural Military Supply Drop Crate Texture with Pine Timber Planks, Steel Brackets & Stencils
+function createWoodSupplyCrateTexture(): { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d')!;
+
+  const bCanvas = document.createElement('canvas');
+  bCanvas.width = 256;
+  bCanvas.height = 256;
+  const bCtx = bCanvas.getContext('2d')!;
+
+  // Weathered olive drab stained timber planks
+  ctx.fillStyle = '#484d38';
+  ctx.fillRect(0, 0, 512, 512);
+  bCtx.fillStyle = '#808080';
+  bCtx.fillRect(0, 0, 256, 256);
+
+  // Vertical timber planks
+  const plankW = 512 / 6;
+  for (let p = 0; p < 6; p++) {
+    const x = p * plankW;
+    const bx = x / 2;
+
+    // Plank gap shadow
+    ctx.fillStyle = '#1f2218';
+    ctx.fillRect(x, 0, 4, 512);
+    bCtx.fillStyle = '#303030';
+    bCtx.fillRect(bx, 0, 2, 256);
+
+    // Woodgrain fibers
+    for (let f = 0; f < 80; f++) {
+      const fx = x + 4 + Math.random() * (plankW - 8);
+      const fy = Math.random() * 512;
+      ctx.fillStyle = `rgba(${70 + Math.random() * 20}, ${75 + Math.random() * 20}, ${50 + Math.random() * 20}, 0.25)`;
+      ctx.fillRect(fx, fy, 1, 24 + Math.random() * 60);
+    }
+
+    // Wood knot whorls
+    if (p === 1 || p === 4) {
+      const kx = x + plankW / 2;
+      const ky = p === 1 ? 160 : 360;
+      ctx.fillStyle = 'rgba(25, 28, 20, 0.45)';
+      ctx.beginPath();
+      ctx.ellipse(kx, ky, 14, 22, 0.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Blackened heavy steel corner reinforcement brackets
+  const bracketW = 44;
+  ctx.fillStyle = '#1e2224';
+  ctx.fillRect(0, 0, 512, bracketW);
+  ctx.fillRect(0, 512 - bracketW, 512, bracketW);
+  ctx.fillRect(0, 0, bracketW, 512);
+  ctx.fillRect(512 - bracketW, 0, bracketW, 512);
+
+  bCtx.fillStyle = '#d0d0d0';
+  const bbw = bracketW / 2;
+  bCtx.fillRect(0, 0, 256, bbw);
+  bCtx.fillRect(0, 256 - bbw, 256, bbw);
+  bCtx.fillRect(0, 0, bbw, 256);
+  bCtx.fillRect(256 - bbw, 0, bbw, 256);
+
+  // Hex bolts on steel brackets
+  const drawCornerBolts = (x: number, y: number) => {
+    ctx.fillStyle = '#0a0d0e';
+    ctx.beginPath();
+    ctx.arc(x + 1.5, y + 1.5, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#4a5258';
+    ctx.beginPath();
+    ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#a0acb5';
+    ctx.beginPath();
+    ctx.arc(x - 1, y - 1, 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    bCtx.fillStyle = '#ffffff';
+    bCtx.beginPath();
+    bCtx.arc(x / 2, y / 2, 3, 0, Math.PI * 2);
+    bCtx.fill();
+  };
+
+  drawCornerBolts(22, 22);
+  drawCornerBolts(490, 22);
+  drawCornerBolts(22, 490);
+  drawCornerBolts(490, 490);
+  drawCornerBolts(256, 22);
+  drawCornerBolts(256, 490);
+
+  // Yellow and white military stencils
+  ctx.save();
+  ctx.font = 'bold 22px monospace';
+  ctx.fillStyle = 'rgba(234, 179, 8, 0.9)';
+  ctx.fillText('ORDNANCE CORPS', 130, 180);
+  ctx.font = 'bold 18px monospace';
+  ctx.fillStyle = 'rgba(248, 250, 252, 0.85)';
+  ctx.fillText('7.62x51mm NATO', 140, 220);
+  ctx.fillText('LOT 92-K / AIRDROP', 120, 260);
+  ctx.fillText('WT: 45 KG', 180, 300);
+
+  // Parachute cargo logo
+  ctx.strokeStyle = 'rgba(234, 179, 8, 0.8)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(256, 360, 32, Math.PI, 0);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(224, 360);
+  ctx.lineTo(256, 400);
+  ctx.lineTo(288, 360);
+  ctx.stroke();
+  ctx.restore();
+
+  const map = new THREE.CanvasTexture(canvas);
+  map.wrapS = THREE.RepeatWrapping;
+  map.wrapT = THREE.RepeatWrapping;
+  map.anisotropy = 8;
+
+  const bumpMap = new THREE.CanvasTexture(bCanvas);
+  bumpMap.wrapS = THREE.RepeatWrapping;
+  bumpMap.wrapT = THREE.RepeatWrapping;
+  bumpMap.anisotropy = 8;
+
+  return { map, bumpMap };
+}
+
+// Procedural Parkerized Gun Metal Texture with Machining Lines, Stippling & Highlights
+function createGunMetalTexture(): { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d')!;
+
+  const bCanvas = document.createElement('canvas');
+  bCanvas.width = 256;
+  bCanvas.height = 256;
+  const bCtx = bCanvas.getContext('2d')!;
+
+  // Deep matte blued steel
+  ctx.fillStyle = '#1c2024';
+  ctx.fillRect(0, 0, 512, 512);
+  bCtx.fillStyle = '#808080';
+  bCtx.fillRect(0, 0, 256, 256);
+
+  // Micro-machined lathe ridges & tooling lines
+  for (let i = 0; i < 2800; i++) {
+    const x = Math.random() * 512;
+    const y = Math.random() * 512;
+    ctx.fillStyle = `rgba(255, 255, 255, ${Math.random() * 0.05})`;
+    ctx.fillRect(x, y, 16 + Math.random() * 45, 0.8);
+  }
+
+  // Receiver stippling & textured grip checkering
+  for (let gy = 260; gy < 480; gy += 6) {
+    for (let gx = 40; gx < 470; gx += 6) {
+      ctx.fillStyle = 'rgba(10, 12, 14, 0.6)';
+      ctx.beginPath();
+      ctx.arc(gx, gy, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      bCtx.fillStyle = '#a0a0a0';
+      bCtx.beginPath();
+      bCtx.arc(gx / 2, gy / 2, 1.0, 0, Math.PI * 2);
+      bCtx.fill();
+    }
+  }
+
+  // Stamped manufacturer roll marks
+  ctx.save();
+  ctx.font = 'bold 15px monospace';
+  ctx.fillStyle = 'rgba(150, 160, 170, 0.45)';
+  ctx.fillText('CAL. 7.62MM AUTO / 1982', 60, 140);
+  ctx.fillText('SAFE  SEMI  AUTO', 60, 210);
+  ctx.restore();
+
+  // Silver edge highlights where metal is frequently handled
+  ctx.strokeStyle = 'rgba(220, 230, 240, 0.35)';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(4, 4, 504, 504);
+
+  const map = new THREE.CanvasTexture(canvas);
+  map.wrapS = THREE.RepeatWrapping;
+  map.wrapT = THREE.RepeatWrapping;
+  map.anisotropy = 8;
+
+  const bumpMap = new THREE.CanvasTexture(bCanvas);
+  bumpMap.wrapS = THREE.RepeatWrapping;
+  bumpMap.wrapT = THREE.RepeatWrapping;
+  bumpMap.anisotropy = 8;
+
+  return { map, bumpMap };
 }
 
 // Procedural Diamond Steel Tread Plate Texture for Bunker Deck
@@ -154,13 +869,20 @@ function createHazardStripeTexture(): THREE.CanvasTexture {
 }
 
 // Brushed-steel / armor plate with panel seams, bolts, and grime
-function createSteelPlateTexture(baseHex: string, seamHex: string): THREE.CanvasTexture {
+function createSteelPlateTexture(baseHex: string, seamHex: string): { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 512;
   const ctx = canvas.getContext('2d')!;
   ctx.fillStyle = baseHex;
   ctx.fillRect(0, 0, 512, 512);
+
+  const bCanvas = document.createElement('canvas');
+  bCanvas.width = 256;
+  bCanvas.height = 256;
+  const bCtx = bCanvas.getContext('2d')!;
+  bCtx.fillStyle = '#808080';
+  bCtx.fillRect(0, 0, 256, 256);
 
   // brushed metal streaks
   for (let i = 0; i < 2400; i++) {
@@ -185,11 +907,20 @@ function createSteelPlateTexture(baseHex: string, seamHex: string): THREE.Canvas
   // panel seams (welded lines)
   ctx.strokeStyle = seamHex;
   ctx.lineWidth = 2;
+  bCtx.strokeStyle = '#303030';
+  bCtx.lineWidth = 1.5;
   for (let i = 0; i < 5; i++) {
+    const y1 = 60 + i * 110 + Math.random() * 20;
+    const y2 = 55 + i * 110 + Math.random() * 25;
     ctx.beginPath();
-    ctx.moveTo(0, 60 + i * 110 + Math.random() * 20);
-    ctx.lineTo(512, 55 + i * 110 + Math.random() * 25);
+    ctx.moveTo(0, y1);
+    ctx.lineTo(512, y2);
     ctx.stroke();
+
+    bCtx.beginPath();
+    bCtx.moveTo(0, y1 / 2);
+    bCtx.lineTo(256, y2 / 2);
+    bCtx.stroke();
   }
   // bolts in a grid
   for (let yy = 30; yy < 512; yy += 96) {
@@ -202,122 +933,207 @@ function createSteelPlateTexture(baseHex: string, seamHex: string): THREE.Canvas
       ctx.beginPath();
       ctx.arc(xx - 1, yy - 1, 2, 0, Math.PI * 2);
       ctx.fill();
+
+      bCtx.fillStyle = '#e0e0e0';
+      bCtx.beginPath();
+      bCtx.arc(xx / 2, yy / 2, 2.5, 0, Math.PI * 2);
+      bCtx.fill();
     }
   }
 
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.anisotropy = 8;
-  return tex;
+  const map = new THREE.CanvasTexture(canvas);
+  map.wrapS = THREE.RepeatWrapping;
+  map.wrapT = THREE.RepeatWrapping;
+  map.anisotropy = 8;
+
+  const bumpMap = new THREE.CanvasTexture(bCanvas);
+  bumpMap.wrapS = THREE.RepeatWrapping;
+  bumpMap.wrapT = THREE.RepeatWrapping;
+  bumpMap.anisotropy = 8;
+
+  return { map, bumpMap };
 }
 
-// Weathered concrete texture
-function createConcreteTexture(): THREE.CanvasTexture {
+// Weathered board-formed concrete texture with aggregate stones & expansion joints
+function createConcreteTexture(): { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 512;
   const ctx = canvas.getContext('2d')!;
   ctx.fillStyle = '#8a857a';
   ctx.fillRect(0, 0, 512, 512);
-  // aggregate speckle
+
+  const bCanvas = document.createElement('canvas');
+  bCanvas.width = 256;
+  bCanvas.height = 256;
+  const bCtx = bCanvas.getContext('2d')!;
+  bCtx.fillStyle = '#808080';
+  bCtx.fillRect(0, 0, 256, 256);
+
+  // Board formwork horizontal lines
+  for (let y = 0; y < 512; y += 64) {
+    ctx.strokeStyle = 'rgba(40, 36, 30, 0.4)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(512, y);
+    ctx.stroke();
+
+    bCtx.strokeStyle = '#404040';
+    bCtx.lineWidth = 1.5;
+    bCtx.beginPath();
+    bCtx.moveTo(0, y / 2);
+    bCtx.lineTo(256, y / 2);
+    bCtx.stroke();
+  }
+
+  // Aggregate stone speckle
   for (let i = 0; i < 9000; i++) {
     const shade = 110 + Math.random() * 70;
     ctx.fillStyle = `rgba(${shade},${shade - 6},${shade - 16},0.5)`;
     ctx.fillRect(Math.random() * 512, Math.random() * 512, 1 + Math.random() * 2, 1 + Math.random() * 2);
   }
-  // staining
+
+  // Grime staining & water runoff streaks
   for (let i = 0; i < 40; i++) {
     const px = Math.random() * 512;
     const py = Math.random() * 512;
     const pr = 20 + Math.random() * 90;
     const g = ctx.createRadialGradient(px, py, 0, px, py, pr);
-    g.addColorStop(0, 'rgba(60,60,50,0.16)');
+    g.addColorStop(0, 'rgba(60,60,50,0.18)');
     g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(px, py, pr, 0, Math.PI * 2);
     ctx.fill();
   }
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.anisotropy = 8;
-  return tex;
+
+  const map = new THREE.CanvasTexture(canvas);
+  map.wrapS = THREE.RepeatWrapping;
+  map.wrapT = THREE.RepeatWrapping;
+  map.anisotropy = 8;
+
+  const bumpMap = new THREE.CanvasTexture(bCanvas);
+  bumpMap.wrapS = THREE.RepeatWrapping;
+  bumpMap.wrapT = THREE.RepeatWrapping;
+  bumpMap.anisotropy = 8;
+
+  return { map, bumpMap };
 }
 
-// Burlap sandbag texture with hessian weave and stitching
-function createSandbagTexture(): THREE.CanvasTexture {
+// Burlap sandbag texture with hessian weave, stitched seams & soil dusting
+function createSandbagTexture(): { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } {
   const canvas = document.createElement('canvas');
   canvas.width = 256;
   canvas.height = 256;
   const ctx = canvas.getContext('2d')!;
   ctx.fillStyle = '#9a8768';
   ctx.fillRect(0, 0, 256, 256);
-  // hessian weave criss-cross
+
+  const bCanvas = document.createElement('canvas');
+  bCanvas.width = 128;
+  bCanvas.height = 128;
+  const bCtx = bCanvas.getContext('2d')!;
+  bCtx.fillStyle = '#808080';
+  bCtx.fillRect(0, 0, 128, 128);
+
+  // Hessian weave criss-cross threads
   ctx.strokeStyle = 'rgba(70,58,38,0.5)';
   ctx.lineWidth = 1;
+  bCtx.strokeStyle = '#a0a0a0';
+  bCtx.lineWidth = 0.8;
+
   for (let i = 0; i < 256; i += 3) {
     ctx.beginPath();
     ctx.moveTo(i, 0);
     ctx.lineTo(i, 256);
     ctx.stroke();
+
     ctx.beginPath();
     ctx.moveTo(0, i);
     ctx.lineTo(256, i);
     ctx.stroke();
+
+    const bi = i / 2;
+    bCtx.beginPath();
+    bCtx.moveTo(bi, 0);
+    bCtx.lineTo(bi, 128);
+    bCtx.stroke();
+    bCtx.beginPath();
+    bCtx.moveTo(0, bi);
+    bCtx.lineTo(128, bi);
+    bCtx.stroke();
   }
-  // color mottling
-  for (let i = 0; i < 500; i++) {
-    ctx.fillStyle = `rgba(${110 + Math.random() * 60},${95 + Math.random() * 55},${62 + Math.random() * 45},0.25)`;
+
+  // Stitched center rope seam
+  ctx.strokeStyle = '#5a4628';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(0, 128);
+  ctx.lineTo(256, 128);
+  ctx.stroke();
+
+  // Color mottling & soil dusting
+  for (let i = 0; i < 600; i++) {
+    ctx.fillStyle = `rgba(${110 + Math.random() * 60},${95 + Math.random() * 55},${62 + Math.random() * 45},0.3)`;
     ctx.fillRect(Math.random() * 256, Math.random() * 256, 2 + Math.random() * 3, 2 + Math.random() * 3);
   }
-  // dirt staining
-  for (let i = 0; i < 16; i++) {
-    const px = Math.random() * 256;
-    const py = Math.random() * 256;
-    const pr = 16 + Math.random() * 50;
-    const g = ctx.createRadialGradient(px, py, 0, px, py, pr);
-    g.addColorStop(0, 'rgba(60,48,30,0.3)');
-    g.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(px, py, pr, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.anisotropy = 8;
-  return tex;
+
+  const map = new THREE.CanvasTexture(canvas);
+  map.wrapS = THREE.RepeatWrapping;
+  map.wrapT = THREE.RepeatWrapping;
+  map.anisotropy = 8;
+
+  const bumpMap = new THREE.CanvasTexture(bCanvas);
+  bumpMap.wrapS = THREE.RepeatWrapping;
+  bumpMap.wrapT = THREE.RepeatWrapping;
+  bumpMap.anisotropy = 8;
+
+  return { map, bumpMap };
 }
 
 // Digital/interlocking soldier camo (woodland)
-function createSoldierCamoTexture(): THREE.CanvasTexture {
+function createSoldierCamoTexture(): { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 512;
   const ctx = canvas.getContext('2d')!;
-  // olive-vert base with digital pixels
   const palettes = ['#3f4a33', '#2e3525', '#57553c', '#23281a'];
   ctx.fillStyle = palettes[0];
   ctx.fillRect(0, 0, 512, 512);
+
+  const bCanvas = document.createElement('canvas');
+  bCanvas.width = 256;
+  bCanvas.height = 256;
+  const bCtx = bCanvas.getContext('2d')!;
+  bCtx.fillStyle = '#808080';
+  bCtx.fillRect(0, 0, 256, 256);
+
   for (let yy = 0; yy < 512; yy += 8) {
     for (let xx = 0; xx < 512; xx += 8) {
       let idx = 0;
-      // pseudo-random noise-based palette pick
       const n = Math.sin(xx * 0.7 + yy * 1.3) * 43758.5453;
       const f = n - Math.floor(n);
       idx = f < 0.34 ? 1 : f < 0.62 ? 2 : f < 0.85 ? 3 : 0;
       ctx.fillStyle = palettes[idx];
       ctx.fillRect(xx, yy, 8, 8);
+
+      bCtx.fillStyle = idx === 1 ? '#606060' : idx === 2 ? '#959595' : '#808080';
+      bCtx.fillRect(xx / 2, yy / 2, 4, 4);
     }
   }
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.anisotropy = 8;
-  return tex;
+
+  const map = new THREE.CanvasTexture(canvas);
+  map.wrapS = THREE.RepeatWrapping;
+  map.wrapT = THREE.RepeatWrapping;
+  map.anisotropy = 8;
+
+  const bumpMap = new THREE.CanvasTexture(bCanvas);
+  bumpMap.wrapS = THREE.RepeatWrapping;
+  bumpMap.wrapT = THREE.RepeatWrapping;
+  bumpMap.anisotropy = 8;
+
+  return { map, bumpMap };
 }
 
 // Common military materials and colors
@@ -338,45 +1154,196 @@ export const COLORS = {
   parachuteCloth: 0x9fa889,
 };
 
-const tankCamoTex = createCamoTexture('#3f4a33', '#1e2417', '#736b56');
-const apcCamoTex = createCamoTexture('#48523c', '#252c1e', '#80775e');
+// Generate procedural textures with both diffuse color maps and high-frequency bump maps
+const tankArmorTex = createDetailedArmorTexture('#3f4a33', '#1e2417', '#736b56', '★ B-42');
+const apcArmorTex = createDetailedArmorTexture('#48523c', '#252c1e', '#80775e', 'APC-08');
+const trackData = createTrackTreadTexture();
+const tireData = createTireTreadTexture();
+const alliedJetData = createJetFuselageTexture(false);
+const enemyJetData = createJetFuselageTexture(true);
+const heliData = createHelicopterFuselageTexture();
+const crateData = createWoodSupplyCrateTexture();
+const gunMetalData = createGunMetalTexture();
 const steelTreadTex = createSteelTreadTexture();
 const hazardTex = createHazardStripeTexture();
-const soldierCamoTex = createSoldierCamoTexture();
-const steelPlateTex = createSteelPlateTexture('#3a3f42', '#16181a');
-const darkSteelPlateTex = createSteelPlateTexture('#20242a', '#0e1013');
-const concreteTex = createConcreteTexture();
-const sandbagTex = createSandbagTexture();
+const soldierCamoData = createSoldierCamoTexture();
+const steelPlateData = createSteelPlateTexture('#3a3f42', '#16181a');
+const darkSteelPlateData = createSteelPlateTexture('#20242a', '#0e1013');
+const concreteData = createConcreteTexture();
+const sandbagData = createSandbagTexture();
 
-// Reusable materials
-const materials = {
-  armorSteel: new THREE.MeshStandardMaterial({ map: steelPlateTex, color: 0xffffff, roughness: 0.42, metalness: 0.8, bumpMap: steelPlateTex, bumpScale: 0.04 }),
-  darkSteel: new THREE.MeshStandardMaterial({ map: darkSteelPlateTex, roughness: 0.5, metalness: 0.85, bumpMap: darkSteelPlateTex, bumpScale: 0.05 }),
-  gunBarrel: new THREE.MeshStandardMaterial({ color: 0x181a1c, roughness: 0.26, metalness: 0.94, bumpMap: darkSteelPlateTex, bumpScale: 0.03 }),
-  brass: new THREE.MeshStandardMaterial({ color: COLORS.goldBrass, roughness: 0.28, metalness: 0.9 }),
-  tankGreen: new THREE.MeshStandardMaterial({ map: tankCamoTex, roughness: 0.62, metalness: 0.32, bumpMap: tankCamoTex, bumpScale: 0.02 }),
-  tankCamoSand: new THREE.MeshStandardMaterial({ color: 0x6e634e, roughness: 0.7, metalness: 0.3 }),
-  apcHull: new THREE.MeshStandardMaterial({ map: apcCamoTex, roughness: 0.62, metalness: 0.32, bumpMap: apcCamoTex, bumpScale: 0.02 }),
-  tracks: new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.78, metalness: 0.5 }),
-  rubberTire: new THREE.MeshStandardMaterial({ color: 0x181a1b, roughness: 0.86, metalness: 0.1 }),
-  camoSoldier: new THREE.MeshStandardMaterial({ map: soldierCamoTex, color: 0xffffff, roughness: 0.85, bumpMap: soldierCamoTex, bumpScale: 0.015 }),
-  soldierSkin: new THREE.MeshStandardMaterial({ color: 0xb58c69, roughness: 0.62 }),
-  soldierVest: new THREE.MeshStandardMaterial({ color: 0x2c3324, roughness: 0.88 }),
-  soldierKneepad: new THREE.MeshStandardMaterial({ color: 0x1c1e1a, roughness: 0.5, metalness: 0.5 }),
-  heliFuselage: new THREE.MeshStandardMaterial({ map: darkSteelPlateTex, color: 0x2f3a2c, roughness: 0.5, metalness: 0.58, bumpMap: darkSteelPlateTex, bumpScale: 0.025 }),
-  heliGlass: new THREE.MeshStandardMaterial({ color: COLORS.glass, roughness: 0.08, metalness: 0.9, transparent: true, opacity: 0.85 }),
-  rotorBlade: new THREE.MeshStandardMaterial({ color: 0x151718, roughness: 0.35, metalness: 0.75 }),
-  parachute: new THREE.MeshStandardMaterial({ map: createStripedParachuteTexture(), roughness: 0.85, side: THREE.DoubleSide }),
-  jetFuselage: new THREE.MeshStandardMaterial({ color: 0x5a6369, roughness: 0.35, metalness: 0.75 }),
+// Reusable master materials
+export const materials = {
+  armorSteel: new THREE.MeshStandardMaterial({
+    map: steelPlateData.map,
+    bumpMap: steelPlateData.bumpMap,
+    bumpScale: 0.05,
+    color: 0xffffff,
+    roughness: 0.38,
+    metalness: 0.82,
+  }),
+  darkSteel: new THREE.MeshStandardMaterial({
+    map: darkSteelPlateData.map,
+    bumpMap: darkSteelPlateData.bumpMap,
+    bumpScale: 0.06,
+    roughness: 0.44,
+    metalness: 0.88,
+  }),
+  gunBarrel: new THREE.MeshStandardMaterial({
+    map: gunMetalData.map,
+    bumpMap: gunMetalData.bumpMap,
+    bumpScale: 0.04,
+    color: 0x22262a,
+    roughness: 0.26,
+    metalness: 0.94,
+  }),
+  brass: new THREE.MeshStandardMaterial({
+    color: COLORS.goldBrass,
+    roughness: 0.25,
+    metalness: 0.92,
+  }),
+  tankGreen: new THREE.MeshStandardMaterial({
+    map: tankArmorTex.map,
+    bumpMap: tankArmorTex.bumpMap,
+    bumpScale: 0.045,
+    roughness: 0.54,
+    metalness: 0.45,
+  }),
+  tankCamoSand: new THREE.MeshStandardMaterial({
+    map: apcArmorTex.map,
+    bumpMap: apcArmorTex.bumpMap,
+    bumpScale: 0.04,
+    roughness: 0.65,
+    metalness: 0.35,
+  }),
+  apcHull: new THREE.MeshStandardMaterial({
+    map: apcArmorTex.map,
+    bumpMap: apcArmorTex.bumpMap,
+    bumpScale: 0.045,
+    roughness: 0.54,
+    metalness: 0.45,
+  }),
+  tracks: new THREE.MeshStandardMaterial({
+    map: trackData.map,
+    bumpMap: trackData.bumpMap,
+    bumpScale: 0.08,
+    roughness: 0.62,
+    metalness: 0.68,
+  }),
+  rubberTire: new THREE.MeshStandardMaterial({
+    map: tireData.map,
+    bumpMap: tireData.bumpMap,
+    bumpScale: 0.07,
+    roughness: 0.84,
+    metalness: 0.12,
+  }),
+  camoSoldier: new THREE.MeshStandardMaterial({
+    map: soldierCamoData.map,
+    bumpMap: soldierCamoData.bumpMap,
+    bumpScale: 0.025,
+    color: 0xffffff,
+    roughness: 0.82,
+  }),
+  soldierSkin: new THREE.MeshStandardMaterial({
+    color: 0xb58c69,
+    roughness: 0.62,
+  }),
+  soldierVest: new THREE.MeshStandardMaterial({
+    map: soldierCamoData.map,
+    bumpMap: soldierCamoData.bumpMap,
+    bumpScale: 0.03,
+    color: 0x90a080,
+    roughness: 0.86,
+  }),
+  soldierKneepad: new THREE.MeshStandardMaterial({
+    color: 0x1c1e1a,
+    roughness: 0.5,
+    metalness: 0.5,
+  }),
+  heliFuselage: new THREE.MeshStandardMaterial({
+    map: heliData.map,
+    bumpMap: heliData.bumpMap,
+    bumpScale: 0.045,
+    roughness: 0.46,
+    metalness: 0.64,
+  }),
+  heliGlass: new THREE.MeshStandardMaterial({
+    color: COLORS.glass,
+    roughness: 0.06,
+    metalness: 0.92,
+    transparent: true,
+    opacity: 0.88,
+  }),
+  rotorBlade: new THREE.MeshStandardMaterial({
+    map: darkSteelPlateData.map,
+    bumpMap: darkSteelPlateData.bumpMap,
+    bumpScale: 0.03,
+    color: 0x1a1d20,
+    roughness: 0.32,
+    metalness: 0.78,
+  }),
+  parachute: new THREE.MeshStandardMaterial({
+    map: createStripedParachuteTexture(),
+    roughness: 0.85,
+    side: THREE.DoubleSide,
+  }),
+  jetFuselage: new THREE.MeshStandardMaterial({
+    map: alliedJetData.map,
+    bumpMap: alliedJetData.bumpMap,
+    bumpScale: 0.04,
+    roughness: 0.35,
+    metalness: 0.74,
+  }),
+  enemyJetFuselage: new THREE.MeshStandardMaterial({
+    map: enemyJetData.map,
+    bumpMap: enemyJetData.bumpMap,
+    bumpScale: 0.04,
+    roughness: 0.38,
+    metalness: 0.72,
+  }),
   jetFlame: new THREE.MeshBasicMaterial({ color: 0xff6600 }),
   shrubLeaf: new THREE.MeshStandardMaterial({ color: 0x3d4f2c, roughness: 0.9 }),
   cables: new THREE.LineBasicMaterial({ color: 0xdddddd }),
-  concrete: new THREE.MeshStandardMaterial({ map: concreteTex, roughness: 0.94, metalness: 0.04, bumpMap: concreteTex, bumpScale: 0.06 }),
-  concreteDark: new THREE.MeshStandardMaterial({ color: 0x3e3c36, roughness: 0.94, metalness: 0.04 }),
-  sandbags: new THREE.MeshStandardMaterial({ map: sandbagTex, color: 0xffffff, roughness: 0.94, bumpMap: sandbagTex, bumpScale: 0.05 }),
-  steelDeck: new THREE.MeshStandardMaterial({ map: steelTreadTex, roughness: 0.55, metalness: 0.75 }),
-  hazardSign: new THREE.MeshStandardMaterial({ map: hazardTex, roughness: 0.5 }),
-  woodCrate: new THREE.MeshStandardMaterial({ color: 0x484b35, roughness: 0.85 }),
+  concrete: new THREE.MeshStandardMaterial({
+    map: concreteData.map,
+    bumpMap: concreteData.bumpMap,
+    bumpScale: 0.08,
+    roughness: 0.92,
+    metalness: 0.06,
+  }),
+  concreteDark: new THREE.MeshStandardMaterial({
+    map: concreteData.map,
+    bumpMap: concreteData.bumpMap,
+    bumpScale: 0.06,
+    color: 0x484640,
+    roughness: 0.92,
+    metalness: 0.06,
+  }),
+  sandbags: new THREE.MeshStandardMaterial({
+    map: sandbagData.map,
+    bumpMap: sandbagData.bumpMap,
+    bumpScale: 0.07,
+    color: 0xffffff,
+    roughness: 0.92,
+  }),
+  steelDeck: new THREE.MeshStandardMaterial({
+    map: steelTreadTex,
+    bumpMap: steelTreadTex,
+    bumpScale: 0.05,
+    roughness: 0.52,
+    metalness: 0.78,
+  }),
+  hazardSign: new THREE.MeshStandardMaterial({
+    map: hazardTex,
+    roughness: 0.48,
+  }),
+  woodCrate: new THREE.MeshStandardMaterial({
+    map: crateData.map,
+    bumpMap: crateData.bumpMap,
+    bumpScale: 0.07,
+    roughness: 0.82,
+    metalness: 0.18,
+  }),
   lensRed: new THREE.MeshStandardMaterial({ color: 0xff1111, roughness: 0.2, metalness: 0.8, emissive: 0x550000 }),
   lensGreen: new THREE.MeshBasicMaterial({ color: 0x00ff66 }),
 };
@@ -1250,11 +2217,10 @@ export function createJetModel(): {
 export function createEnemyJetModel(): { group: THREE.Group } {
   const { group } = createJetModel();
   group.name = 'enemy_fighter_jet';
-  const enemyJetMat = new THREE.MeshStandardMaterial({ color: 0x2e3a2f, roughness: 0.4, metalness: 0.7 });
   group.traverse((child) => {
     const mesh = child as THREE.Mesh;
     if (mesh.isMesh && mesh.material !== materials.jetFlame && mesh.material !== materials.heliGlass) {
-      mesh.material = enemyJetMat;
+      mesh.material = materials.enemyJetFuselage;
     }
   });
   return { group };

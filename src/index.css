@@ -30,3 +30,74 @@ body {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+/* 3D Viewport Canvas Grading: Crisp micro-contrast and enhanced surface texture saturation */
+#game-3d-viewport canvas {
+  filter: contrast(109%) saturate(114%) brightness(101%);
+  image-rendering: auto;
+}
+
+/* Tactical Optical Vignette: realistic battlefield lens periphery falloff */
+.tactical-vignette {
+  background: radial-gradient(
+    ellipse at 50% 50%,
+    rgba(0, 0, 0, 0) 55%,
+    rgba(8, 12, 16, 0.28) 80%,
+    rgba(4, 6, 8, 0.65) 100%
+  );
+  pointer-events: none;
+}
+
+/* Multi-coated optical glass anti-reflective tint */
+.lens-coating {
+  background: linear-gradient(
+    135deg,
+    rgba(34, 197, 94, 0.02) 0%,
+    rgba(0, 0, 0, 0) 40%,
+    rgba(59, 130, 246, 0.025) 100%
+  );
+  pointer-events: none;
+}
+
+/* Tactical Rangefinder Corner Brackets */
+.corner-bracket-tl {
+  border-top: 2px solid rgba(234, 179, 8, 0.45);
+  border-left: 2px solid rgba(234, 179, 8, 0.45);
+}
+.corner-bracket-tr {
+  border-top: 2px solid rgba(234, 179, 8, 0.45);
+  border-right: 2px solid rgba(234, 179, 8, 0.45);
+}
+.corner-bracket-bl {
+  border-bottom: 2px solid rgba(234, 179, 8, 0.45);
+  border-left: 2px solid rgba(234, 179, 8, 0.45);
+}
+.corner-bracket-br {
+  border-bottom: 2px solid rgba(234, 179, 8, 0.45);
+  border-right: 2px solid rgba(234, 179, 8, 0.45);
+}
+
+/* Optical Scope Sight (When zoomed 2x or 4x) */
+.sniper-scope-mask {
+  background: radial-gradient(
+    circle at 50% 50%,
+    transparent 0px,
+    transparent min(36vw, 36vh),
+    rgba(0, 0, 0, 0.82) calc(min(36vw, 36vh) + 20px),
+    rgba(0, 0, 0, 0.98) calc(min(36vw, 36vh) + 50px),
+    #000000 calc(min(36vw, 36vh) + 60px)
+  );
+  pointer-events: none;
+}
+
+/* Night-vision tactical phosphor grade */
+.night-vision-grade {
+  background: radial-gradient(
+    ellipse at 50% 50%,
+    rgba(34, 197, 94, 0.08) 0%,
+    rgba(16, 185, 129, 0.05) 60%,
+    rgba(6, 78, 59, 0.28) 100%
+  );
+  mix-blend-mode: color;
+  pointer-events: none;
+}

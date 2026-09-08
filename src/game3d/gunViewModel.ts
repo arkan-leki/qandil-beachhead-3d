@@ -9,6 +9,7 @@
  */
 import * as THREE from 'three';
 import { WeaponType } from '../types';
+import { materials } from './modelFactory';
 
 interface UnitRefs {
   group: THREE.Group;
@@ -53,10 +54,10 @@ export class GunViewModel {
     this.group = new THREE.Group();
     this.group.name = 'gun_viewmodel';
 
-    const gunSteelMat = new THREE.MeshStandardMaterial({ color: 0x1f2326, roughness: 0.35, metalness: 0.85 });
-    const darkTrimMat = new THREE.MeshStandardMaterial({ color: 0x121415, roughness: 0.5, metalness: 0.9 });
-    const highlightMat = new THREE.MeshStandardMaterial({ color: 0x3d4347, roughness: 0.25, metalness: 0.7 });
-    const brassMat = new THREE.MeshStandardMaterial({ color: 0xc8a652, roughness: 0.3, metalness: 0.9 });
+    const gunSteelMat = materials.gunBarrel;
+    const darkTrimMat = materials.darkSteel;
+    const highlightMat = materials.armorSteel;
+    const brassMat = materials.brass;
 
     // ============ TWIN SCREEN-SIDE GUNS ============
     const buildUnit = (side: -1 | 1): UnitRefs => {

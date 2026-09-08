@@ -417,8 +417,45 @@ export default function App() {
         className="absolute inset-0 w-full h-full cursor-crosshair touch-none"
       />
 
-      {/* Screen Hit Flash Effect when base is damaged */}
-      {stats.baseHealth < 100 && stats.baseHealth > 0 && (
+      {/* CSS Tactical Optical Vignette & Multi-Coating Sheen */}
+      <div className="absolute inset-0 pointer-events-none tactical-vignette" />
+      <div className="absolute inset-0 pointer-events-none lens-coating" />
+
+      {/* CSS Precision Optics Rangefinder Corner Brackets */}
+      <div className="absolute top-3 left-3 w-8 h-8 pointer-events-none corner-bracket-tl opacity-60" />
+      <div className="absolute top-3 right-3 w-8 h-8 pointer-events-none corner-bracket-tr opacity-60" />
+      <div className="absolute bottom-3 left-3 w-8 h-8 pointer-events-none corner-bracket-bl opacity-60" />
+      <div className="absolute bottom-3 right-3 w-8 h-8 pointer-events-none corner-bracket-br opacity-60" />
+
+      {/* Optical Sniper Scope Mask & Stadiametric Markings (Active when Zoomed 2x or 4x) */}
+      {zoomLevel > 1 && (
+        <div className="absolute inset-0 pointer-events-none sniper-scope-mask flex items-center justify-center">
+          {/* Mil-dot horizontal and vertical reticle lines */}
+          <div className="relative w-full h-full pointer-events-none flex items-center justify-center">
+            {/* Range markers */}
+            <div className="absolute text-[10px] text-amber-400/70 font-mono select-none" style={{ transform: 'translateY(-60px)' }}>
+              ▲ 200M
+            </div>
+            <div className="absolute text-[10px] text-amber-400/70 font-mono select-none" style={{ transform: 'translateY(60px)' }}>
+              ▼ 400M
+            </div>
+            <div className="absolute text-[10px] text-amber-400/70 font-mono select-none" style={{ transform: 'translateX(-80px)' }}>
+              ◄ 10 MIL
+            </div>
+            <div className="absolute text-[10px] text-amber-400/70 font-mono select-none" style={{ transform: 'translateX(80px)' }}>
+              10 MIL ►
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tactical Night Vision Phosphor Filter Overlay */}
+      {isNight && (
+        <div className="absolute inset-0 pointer-events-none night-vision-grade" />
+      )}
+
+      {/* Screen Hit Flash Effect when base is damaged - ceases immediately on death */}
+      {gameState === 'playing' && stats.baseHealth < 100 && stats.baseHealth > 0 && (
         <div
           className="absolute inset-0 pointer-events-none transition-opacity duration-300"
           style={{
