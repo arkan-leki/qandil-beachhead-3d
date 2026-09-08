@@ -25,6 +25,7 @@ const QUICK_CHEATS = [
   { code: 'airdrop', label: 'Supply Drop', descEn: 'Allied drop crate', descZh: '呼叫空投补给' },
   { code: 'airstrike', label: 'Airstrike +3', descEn: '+3 Jet strikes', descZh: '补充空中轰炸' },
   { code: 'night', label: 'Toggle Night', descEn: 'Night / Day vision', descZh: '昼夜模式切换' },
+  { code: 'flare', label: 'Illumination Flare', descEn: 'Launch battlefield flare (F)', descZh: '发射战地照明弹 (F)' },
 ];
 
 export const CheatConsole: React.FC<CheatConsoleProps> = ({

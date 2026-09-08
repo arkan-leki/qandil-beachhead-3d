@@ -22,6 +22,7 @@ import {
   createAntiAirGunTurret,
   createAPCModel,
   createEnemyJetModel,
+  createFlareModel,
   createHelicopterModel,
   createJetModel,
   createMountainTerrain,
@@ -106,6 +107,21 @@ export const DIFFICULTY_SETTINGS: Record<Difficulty, DifficultyConfig> = {
   },
 };
 
+interface ActiveFlare {
+  id: number;
+  stage: 'rocket' | 'parachute';
+  position: THREE.Vector3;
+  velocity: THREE.Vector3;
+  meshGroup: THREE.Group;
+  rocketGroup: THREE.Group;
+  parachuteGroup: THREE.Group;
+  flareLight: THREE.PointLight;
+  flareCandle: THREE.Mesh;
+  life: number;
+  maxLife: number;
+  smokeTimer: number;
+}
+
 export class GameEngine {
   private container: HTMLElement;
   private scene: THREE.Scene;
@@ -170,7 +186,8 @@ export class GameEngine {
   private fillLight!: THREE.DirectionalLight;
   private searchlight!: THREE.SpotLight;
   private searchlightTarget: THREE.Object3D = new THREE.Object3D();
-  private flareLights: { light: THREE.PointLight; life: number; maxLife: number }[] = [];
+  private activeFlares: ActiveFlare[] = [];
+  private lastFlareTime: number = 0;
   private panoramaDome?: THREE.Object3D;
 
   // Weapons State
@@ -770,6 +787,8 @@ export class GameEngine {
     this.supplyDrops = [];
     this.projectiles.forEach((p) => this.scene.remove(p.mesh));
     this.projectiles = [];
+    this.activeFlares.forEach((f) => this.scene.remove(f.meshGroup));
+    this.activeFlares = [];
     this.echelons = [];
     this.startWave(this.stats.wave + 1);
   }
@@ -876,6 +895,14 @@ export class GameEngine {
     if (cmd === 'night' || cmd === 'day') {
       this.setNight(!this.isNight);
       const msg = this.isNight ? 'NIGHT BATTLE ENGAGED' : 'DAYLIGHT ENGAGED';
+      if (this.onCheatNotice) this.onCheatNotice(msg);
+      return { success: true, message: msg };
+    }
+
+    // Battlefield Illumination Flare
+    if (cmd === 'flare' || cmd === 'light' || cmd === 'illumination') {
+      this.fireFlare();
+      const msg = 'FLARE LAUNCHED: BATTLEFIELD ILLUMINATED';
       if (this.onCheatNotice) this.onCheatNotice(msg);
       return { success: true, message: msg };
     }
@@ -1350,29 +1377,207 @@ export class GameEngine {
     return { speedMult: 1.25, damageMult: 1.5, hpMult: 1.45, spawnSpeedMult: 0.5 };
   }
 
-  // Lobs a flare from the bunker that illuminates the battlefield for a few seconds.
+  // Lobs an authentic battlefield illumination flare from the bunker high into the sky.
+  // The rocket stage climbs on a high-angle arc with a fiery smoke tracer, then deploys
+  // an illuminated parachute canopy at apex that slowly drifts downward while lighting the valley.
   public fireFlare() {
     if (this.gameState !== 'playing') return;
-    // Launch outward in the aim direction
-    const dir = new THREE.Vector3(
-      -Math.sin(this.yaw) * Math.cos(this.pitch),
-      Math.sin(this.pitch),
-      -Math.cos(this.yaw) * Math.cos(this.pitch)
-    ).normalize();
-    const x = Math.sin(this.yaw) * 40;
-    const z = Math.cos(this.yaw) * 40;
-    const y = this.getHeightAt(x, z) + 18;
-    const light = new THREE.PointLight(0xffe9b0, 3.2, 180, 1.6);
-    light.position.set(x, y, z);
-    this.scene.add(light);
-    this.flareLights.push({ light, life: 0, maxLife: 5.0 });
+
+    const now = performance.now();
+    // 0.8s cooldown to prevent accidental rapid double-clicks
+    if (now - this.lastFlareTime < 800) return;
+    this.lastFlareTime = now;
+
+    soundManager.init();
     soundManager.playFlare();
-    // small flare glow particle
-    this.particles.push({
-      x, y, z, vx: 0, vy: 0, vz: 0,
-      color: '#fff2c0', size: 3.0, life: 0, maxLife: 5.0,
+
+    // Player aim direction (forward vector along yaw)
+    const forwardX = -Math.sin(this.yaw);
+    const forwardZ = -Math.cos(this.yaw);
+
+    // Launch origin: Front of bunker redoubt, elevated above the turret
+    const spawnPos = new THREE.Vector3(
+      forwardX * 1.5,
+      6.4,
+      forwardZ * 1.5
+    );
+
+    // Steep high-angle mortar arc into the sky above the target sector
+    // Elevation clamped between 25 and 65 degrees
+    const launchPitch = Math.max(0.48, Math.min(1.15, this.pitch + 0.55));
+    const launchSpeed = 46.0; // m/s
+    const vel = new THREE.Vector3(
+      forwardX * Math.cos(launchPitch) * launchSpeed,
+      Math.sin(launchPitch) * launchSpeed,
+      forwardZ * Math.cos(launchPitch) * launchSpeed
+    );
+
+    // Build 3D flare model (rocket + parachute stages)
+    const { group, rocketGroup, parachuteGroup, flareLight, flareCandle } = createFlareModel();
+    group.position.copy(spawnPos);
+    this.scene.add(group);
+
+    this.activeFlares.push({
+      id: this.nextEntityId++,
+      stage: 'rocket',
+      position: spawnPos.clone(),
+      velocity: vel,
+      meshGroup: group,
+      rocketGroup,
+      parachuteGroup,
+      flareLight,
+      flareCandle,
+      life: 0,
+      maxLife: 16.0, // 16 seconds of illumination
+      smokeTimer: 0,
     });
-    void dir;
+
+    // Bunker muzzle blast flash and smoke particles
+    this.screenShake = Math.max(this.screenShake, 0.14);
+    for (let i = 0; i < 12; i++) {
+      this.particles.push({
+        x: spawnPos.x + (Math.random() - 0.5) * 0.4,
+        y: spawnPos.y + (Math.random() - 0.5) * 0.4,
+        z: spawnPos.z + (Math.random() - 0.5) * 0.4,
+        vx: vel.x * 0.12 + (Math.random() - 0.5) * 5,
+        vy: vel.y * 0.12 + Math.random() * 4,
+        vz: vel.z * 0.12 + (Math.random() - 0.5) * 5,
+        color: Math.random() > 0.4 ? '#fff1be' : '#ff9922',
+        size: 2.8,
+        life: 0,
+        maxLife: 0.45,
+      });
+    }
+
+    // Viewmodel recoil impulse
+    this.gunView.triggerRecoil(0.2, 0);
+
+    // Floating combat notification
+    this.addFloater(0, 7.5, -4, '⚡ FLARE LAUNCHED', '#fbbf24');
+  }
+
+  // Updates active flares: ascending rocket stage -> apex parachute deployment -> slow drift
+  private updateFlares(dt: number) {
+    for (let i = this.activeFlares.length - 1; i >= 0; i--) {
+      const f = this.activeFlares[i];
+      f.life += dt;
+      f.smokeTimer += dt;
+
+      if (f.stage === 'rocket') {
+        // Rocket flight: Gravity pulls downward
+        f.velocity.y -= 22 * dt;
+        f.position.addScaledVector(f.velocity, dt);
+        f.meshGroup.position.copy(f.position);
+
+        // Align rocket casing with flight velocity vector
+        if (f.velocity.lengthSq() > 0.5) {
+          const dir = f.velocity.clone().normalize();
+          f.meshGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+        }
+
+        // Rocket exhaust sparks & smoke trail
+        if (f.smokeTimer >= 0.025) {
+          f.smokeTimer = 0;
+          this.particles.push({
+            x: f.position.x + (Math.random() - 0.5) * 0.3,
+            y: f.position.y + (Math.random() - 0.5) * 0.3,
+            z: f.position.z + (Math.random() - 0.5) * 0.3,
+            vx: (Math.random() - 0.5) * 1.5,
+            vy: -1.5 + Math.random() * 2,
+            vz: (Math.random() - 0.5) * 1.5,
+            color: Math.random() > 0.3 ? '#ffaa33' : '#fff4cc',
+            size: 2.8,
+            life: 0,
+            maxLife: 0.5,
+          });
+        }
+
+        // Ascending rocket light glow
+        f.flareLight.intensity = 4.0;
+
+        // At apex (vy <= 0) or after 1.25s of rocket ascent: deploy parachute!
+        if (f.velocity.y <= 0 || f.life >= 1.25) {
+          f.stage = 'parachute';
+          f.rocketGroup.visible = false;
+          f.parachuteGroup.visible = true;
+          f.meshGroup.quaternion.identity(); // Upright parachute
+          soundManager.playFlarePop();
+
+          // Apex burst flash & spark shower
+          for (let s = 0; s < 22; s++) {
+            this.particles.push({
+              x: f.position.x,
+              y: f.position.y,
+              z: f.position.z,
+              vx: (Math.random() - 0.5) * 9,
+              vy: (Math.random() - 0.5) * 7,
+              vz: (Math.random() - 0.5) * 9,
+              color: Math.random() > 0.3 ? '#fff5c4' : '#ff9922',
+              size: 3.5,
+              life: 0,
+              maxLife: 0.7,
+            });
+          }
+
+          // Transition to gentle parachute float
+          f.velocity.set(
+            (Math.random() - 0.5) * 1.5,
+            -2.4, // slow float descent
+            (Math.random() - 0.5) * 1.5
+          );
+        }
+      } else {
+        // PARACHUTE STAGE: Gentle drift with wind
+        f.velocity.y = -2.2 - Math.sin(f.life * 1.6) * 0.25;
+        f.velocity.x = Math.sin(f.life * 0.8 + f.id) * 1.3;
+        f.velocity.z = Math.cos(f.life * 0.7 + f.id) * 1.3;
+
+        f.position.addScaledVector(f.velocity, dt);
+
+        // Keep above ground if parachute lands
+        const terrainH = this.getHeightAt(f.position.x, f.position.z);
+        if (f.position.y <= terrainH + 0.6) {
+          f.position.y = terrainH + 0.6;
+          f.velocity.set(0, 0, 0);
+        }
+
+        f.meshGroup.position.copy(f.position);
+
+        // Natural pendulum sway of parachute
+        f.parachuteGroup.rotation.z = Math.sin(f.life * 2.0) * 0.12;
+        f.parachuteGroup.rotation.x = Math.cos(f.life * 1.7) * 0.12;
+
+        // Flare candle flicker and fade-out
+        const flicker = 0.92 + Math.sin(f.life * 30) * 0.08 + (Math.random() - 0.5) * 0.05;
+        const fadeMult = f.life > f.maxLife - 3.0
+          ? Math.max(0, (f.maxLife - f.life) / 3.0)
+          : 1.0;
+        f.flareLight.intensity = 9.0 * flicker * fadeMult;
+
+        // Dropping glowing embers & smoke
+        if (f.smokeTimer >= 0.05 && fadeMult > 0.05) {
+          f.smokeTimer = 0;
+          this.particles.push({
+            x: f.position.x + (Math.random() - 0.5) * 0.25,
+            y: f.position.y - 0.35,
+            z: f.position.z + (Math.random() - 0.5) * 0.25,
+            vx: (Math.random() - 0.5) * 1.2,
+            vy: -3.5 - Math.random() * 2.5,
+            vz: (Math.random() - 0.5) * 1.2,
+            color: Math.random() > 0.4 ? '#fff0aa' : '#ff9922',
+            size: 2.0,
+            life: 0,
+            maxLife: 0.85,
+          });
+        }
+      }
+
+      // Expire flare
+      if (f.life >= f.maxLife) {
+        this.scene.remove(f.meshGroup);
+        this.activeFlares.splice(i, 1);
+      }
+    }
   }
 
   private updateAtmosphere(dt: number) {
@@ -1392,15 +1597,30 @@ export class GameEngine {
     const fog = this.scene.fog as THREE.Fog;
     fog.color.copy(fogDay).lerp(fogNight, t);
 
+    // Calculate battlefield illumination boost from active flares
+    let totalFlarePower = 0;
+    for (const f of this.activeFlares) {
+      if (f.stage === 'parachute') {
+        totalFlarePower += f.flareLight.intensity;
+      } else {
+        totalFlarePower += f.flareLight.intensity * 0.35;
+      }
+    }
+    const flareBoost = Math.min(1.0, totalFlarePower / 12.0);
+
     // Lights
     this.sunLight.intensity = 1.6 * (1 - t) + 0.0 * t;
     this.sunLight.color.set(0xfffaed).lerp(new THREE.Color(0x8899bb), t);
-    this.ambientLight.intensity = 0.85 * (1 - t) + 0.28 * t;
+    this.ambientLight.intensity = 0.85 * (1 - t) + (0.28 + flareBoost * 0.65) * t;
     this.ambientLight.color.set(0xdbe3ea).lerp(new THREE.Color(0x9fb0d0), t);
-    this.fillLight.intensity = 0.6 * (1 - t) + 0.15 * t;
+    if (this.isNight && flareBoost > 0.05) {
+      this.ambientLight.color.lerp(new THREE.Color(0xffe2a8), flareBoost * 0.45);
+      fog.color.lerp(new THREE.Color(0x383e52), flareBoost * 0.4);
+    }
+    this.fillLight.intensity = 0.6 * (1 - t) + (0.15 + flareBoost * 0.3) * t;
 
-    // Renderer exposure slightly darker at night
-    this.renderer.toneMappingExposure = 1.1 * (1 - t) + 0.85 * t;
+    // Renderer exposure slightly darker at night, but brightened by active flares
+    this.renderer.toneMappingExposure = 1.1 * (1 - t) + (0.85 + flareBoost * 0.25) * t;
 
     // Update 360 Mountain Panorama Dome day/night blend
     if (!this.panoramaDome) {
@@ -1423,18 +1643,6 @@ export class GameEngine {
       this.searchlight.position.y + dir.y * 80,
       this.searchlight.position.z + dir.z * 80
     );
-
-    // Update flares
-    for (let i = this.flareLights.length - 1; i >= 0; i--) {
-      const f = this.flareLights[i];
-      f.life += dt;
-      const k = Math.max(0, 1 - f.life / f.maxLife);
-      f.light.intensity = 3.2 * k;
-      if (f.life >= f.maxLife) {
-        this.scene.remove(f.light);
-        this.flareLights.splice(i, 1);
-      }
-    }
   }
 
   /* ================= ENEMY FACTORIES & SPAWNING ================= */
@@ -3154,6 +3362,7 @@ export class GameEngine {
     this.updateParticles(dt);
     this.updateFloaters(dt);
     this.updateRadarBlips();
+    this.updateFlares(dt);
     this.updateAtmosphere(dt);
 
     // First-Person Gun Viewmodel animation (idle breathing, sway, recoil, casings)
@@ -3217,6 +3426,8 @@ export class GameEngine {
 
   public cleanup() {
     if (this.animFrameId) cancelAnimationFrame(this.animFrameId);
+    this.activeFlares.forEach((f) => this.scene.remove(f.meshGroup));
+    this.activeFlares = [];
     this.renderer.dispose();
     if (this.renderer.domElement && this.renderer.domElement.parentElement) {
       this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);

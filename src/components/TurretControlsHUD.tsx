@@ -246,15 +246,17 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
             >
               🚁
             </button>
-            {isNight && (
-              <button
-                onClick={onFlare}
-                className="w-9 h-9 rounded flex items-center justify-center border border-indigo-500/70 bg-indigo-950/80 text-lg"
-                title={t.flareTitle}
-              >
-                💡
-              </button>
-            )}
+            <button
+              onClick={onFlare}
+              className={`w-9 h-9 rounded flex items-center justify-center border text-base transition-all ${
+                isNight
+                  ? 'border-amber-400 bg-amber-950/90 text-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.6)] animate-pulse'
+                  : 'border-amber-600/60 bg-zinc-900/80 text-amber-400 hover:bg-zinc-800'
+              }`}
+              title={t.flareTitle}
+            >
+              🔥
+            </button>
             <button
               onClick={onToggleZoom}
               className="w-9 h-9 rounded flex items-center justify-center border border-zinc-700 bg-black/60 text-zinc-200"

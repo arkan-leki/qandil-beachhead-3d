@@ -2065,3 +2065,126 @@ export function createSupplyCrateModel(): {
 
   return { group, crateMesh, parachuteMesh, beaconLight };
 }
+
+/**
+ * Creates a complete battlefield illumination flare 3D entity:
+ * - Rocket stage (aerodynamic shell casing with nose cone, fins, and flaming rocket exhaust)
+ * - Parachute stage (domed parachute canopy with suspension cords, glowing magnesium flare candle, and radial glow halo)
+ */
+export function createFlareModel(): {
+  group: THREE.Group;
+  rocketGroup: THREE.Group;
+  parachuteGroup: THREE.Group;
+  flareLight: THREE.PointLight;
+  flareCandle: THREE.Mesh;
+} {
+  const group = new THREE.Group();
+  group.name = 'battlefield_flare';
+
+  // 1. ROCKET GROUP (Shown during initial high-speed ascent)
+  const rocketGroup = new THREE.Group();
+  rocketGroup.name = 'flare_rocket';
+
+  // Rocket body: 0.12m radius, 0.9m length, olive/red ordnance
+  const rocketBodyMat = new THREE.MeshStandardMaterial({
+    color: 0x993322,
+    metalness: 0.7,
+    roughness: 0.35,
+  });
+  const rocketBody = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.85, 10), rocketBodyMat);
+  rocketBody.rotation.x = Math.PI / 2;
+  rocketGroup.add(rocketBody);
+
+  // Nose cone
+  const noseMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8, roughness: 0.2 });
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.3, 10), noseMat);
+  nose.position.z = 0.55;
+  nose.rotation.x = Math.PI / 2;
+  rocketGroup.add(nose);
+
+  // Tail fins (4 fins)
+  const finMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.5, roughness: 0.4 });
+  for (let f = 0; f < 4; f++) {
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.25, 0.25), finMat);
+    fin.position.z = -0.32;
+    fin.rotation.z = (f * Math.PI) / 2;
+    rocketGroup.add(fin);
+  }
+
+  // Rocket exhaust flame glow
+  const flameMat = new THREE.MeshBasicMaterial({ color: 0xffaa22 });
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.45, 8), flameMat);
+  flame.position.z = -0.65;
+  flame.rotation.x = -Math.PI / 2;
+  rocketGroup.add(flame);
+
+  group.add(rocketGroup);
+
+  // 2. PARACHUTE GROUP (Deployed at apex for slow drift and brilliant illumination)
+  const parachuteGroup = new THREE.Group();
+  parachuteGroup.name = 'flare_parachute';
+  parachuteGroup.visible = false; // Hidden until deployment
+
+  // Parachute canopy: Hemispherical dome (1.8m radius)
+  const canopyGeo = new THREE.SphereGeometry(2.0, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.55);
+  const canopyMat = new THREE.MeshStandardMaterial({
+    color: 0xfffbf0,
+    roughness: 0.8,
+    side: THREE.DoubleSide,
+  });
+  const canopyMesh = new THREE.Mesh(canopyGeo, canopyMat);
+  canopyMesh.position.set(0, 3.2, 0);
+  parachuteGroup.add(canopyMesh);
+
+  // Suspension cords
+  const cordPositions: number[] = [];
+  const cordCount = 8;
+  for (let i = 0; i < cordCount; i++) {
+    const ang = (i / cordCount) * Math.PI * 2;
+    const rimX = Math.cos(ang) * 1.9;
+    const rimZ = Math.sin(ang) * 1.9;
+    const rimY = 3.2 - 0.2;
+    cordPositions.push(rimX, rimY, rimZ);
+    cordPositions.push(0, 0.4, 0);
+  }
+  const cordGeo = new THREE.BufferGeometry();
+  cordGeo.setAttribute('position', new THREE.Float32BufferAttribute(cordPositions, 3));
+  const cords = new THREE.LineSegments(cordGeo, new THREE.LineBasicMaterial({ color: 0x888888 }));
+  parachuteGroup.add(cords);
+
+  // Flare canister
+  const canisterMat = new THREE.MeshStandardMaterial({
+    color: 0x444444,
+    metalness: 0.8,
+    roughness: 0.3,
+  });
+  const canister = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.6, 10), canisterMat);
+  canister.position.set(0, 0.1, 0);
+  parachuteGroup.add(canister);
+
+  // Intense glowing magnesium flare flame
+  const flareCandleMat = new THREE.MeshBasicMaterial({ color: 0xfffbee });
+  const flareCandle = new THREE.Mesh(new THREE.SphereGeometry(0.32, 10, 10), flareCandleMat);
+  flareCandle.position.set(0, -0.28, 0);
+  parachuteGroup.add(flareCandle);
+
+  // Outer flare corona
+  const coronaMat = new THREE.MeshBasicMaterial({
+    color: 0xffcc44,
+    transparent: true,
+    opacity: 0.55,
+  });
+  const corona = new THREE.Mesh(new THREE.SphereGeometry(0.65, 8, 8), coronaMat);
+  corona.position.copy(flareCandle.position);
+  parachuteGroup.add(corona);
+
+  group.add(parachuteGroup);
+
+  // 3. High-intensity battlefield illumination point light
+  const flareLight = new THREE.PointLight(0xffe8ba, 8.5, 320, 1.2);
+  flareLight.position.set(0, -0.3, 0);
+  group.add(flareLight);
+
+  return { group, rocketGroup, parachuteGroup, flareLight, flareCandle };
+}
+

@@ -431,6 +431,26 @@ class SoundManager {
     osc.stop(t + 0.3);
   }
 
+  // Flare parachute deployment pop & hiss
+  public playFlarePop() {
+    if (this.isMuted || !this.ctx) return;
+    const t = this.ctx.currentTime;
+
+    const osc = this.ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(520, t);
+    osc.frequency.exponentialRampToValueAtTime(140, t + 0.18);
+
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.35, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+
+    osc.connect(g);
+    g.connect(this.ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.2);
+  }
+
   // Weapon reload clank
   public playReload() {
     if (this.isMuted || !this.ctx) return;
