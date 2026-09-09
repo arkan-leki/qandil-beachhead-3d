@@ -58,6 +58,11 @@ export interface Translations {
   // HUD & Weapons
   fire: string;
   guns: string;
+  scope: string;
+  airAttack: string;
+  drone: string;
+  ready: string;
+  cooldown: string;
   tapFireHoldGuns: string;
   bunkerIntegrity: string;
   reloading: string;
@@ -151,6 +156,11 @@ export const I18N: Record<Language, Translations> = {
 
     fire: 'FIRE',
     guns: 'GUNS',
+    scope: 'SCOPE',
+    airAttack: 'AIR STRIKE',
+    drone: 'DRONE',
+    ready: 'READY',
+    cooldown: 'WAIT',
     tapFireHoldGuns: 'TAP FIRE · HOLD GUNS',
     bunkerIntegrity: 'BUNKER INTEGRITY',
     reloading: 'RELOADING',
@@ -246,6 +256,11 @@ export const I18N: Record<Language, Translations> = {
 
     fire: 'تەقە',
     guns: 'چەک',
+    scope: 'دووربین',
+    airAttack: 'بۆردومان',
+    drone: 'درۆن',
+    ready: 'ئامادەیە',
+    cooldown: 'چاوەڕوانبە',
     tapFireHoldGuns: 'تەقە • ڕاگرتنی چەک',
     bunkerIntegrity: 'تەندروستی سەنگەر',
     reloading: 'پڕکردنەوە...',
@@ -341,6 +356,11 @@ export const I18N: Record<Language, Translations> = {
 
     fire: '开火',
     guns: '武器库',
+    scope: '开镜',
+    airAttack: '空袭',
+    drone: '无人机',
+    ready: '就绪',
+    cooldown: '冷却',
     tapFireHoldGuns: '点按开火 · 长按切换武器',
     bunkerIntegrity: '碉堡装甲强度',
     reloading: '正在装填换弹...',

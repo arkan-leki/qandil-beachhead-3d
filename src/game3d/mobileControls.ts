@@ -84,12 +84,8 @@ export class MobileControls {
   // Touch gesture state
   private touchStartTime = 0;
   private touchStartPos: { x: number; y: number }[] = [];
-  private pinchStartDist = 0;
   private longPressTimer: number | null = null;
   private gestureLocked = false;
-  private lastTapTime = 0;
-  private rightZoneTaps = 0;   // consecutive quick taps on the right (gun) zone
-  private lastRightTap = 0;
 
   constructor(el: HTMLElement, cb: MobileCallbacks) {
     this.settings = loadMobileSettings();
@@ -243,52 +239,35 @@ export class MobileControls {
       this.requestGyroPermission();
     }
 
-    if (touches.length === 2) {
-      this.pinchStartDist = Math.hypot(
-        touches[0].clientX - touches[1].clientX,
-        touches[0].clientY - touches[1].clientY
-      );
-      return;
+    // Prevent default browser pinch-zoom behavior when 2+ fingers touch
+    if (touches.length > 1) {
+      e.preventDefault();
     }
   }
 
   private onTouchMove(e: TouchEvent) {
-    const touches = Array.from(e.touches);
-    if (touches.length === 2) {
+    // Multi-touch: prevent default browser zoom/scroll without triggering game zoom
+    if (e.touches.length > 1) {
       e.preventDefault();
-      const dist = Math.hypot(
-        touches[0].clientX - touches[1].clientX,
-        touches[0].clientY - touches[1].clientY
-      );
-      if (this.pinchStartDist > 0) {
-        const ratio = dist / this.pinchStartDist;
-        if (ratio > 1.25) { this.cb.onToggleZoom(); this.pinchStartDist = dist; }
-        else if (ratio < 0.8) { this.cb.onToggleZoom(); this.pinchStartDist = dist; }
-      }
-      return;
     }
-    // Single-finger drag on the LEFT is handled by the engine as aim.
-    // Nothing here interprets swipes, so aiming never changes guns/settings.
+    // Single-finger drag on the LEFT is handled by the engine as camera aim.
+    // Accidental screen gestures (pinch/swipes) will NEVER trigger zoom or airstrikes.
   }
 
   private onTouchEnd(e: TouchEvent) {
     if (this.longPressTimer) { clearTimeout(this.longPressTimer); this.longPressTimer = null; }
     if (this.gestureLocked) return;
 
+    // If multi-touch occurred, do not trigger any single-tap action
+    if (this.touchStartPos.length > 1) {
+      return;
+    }
+
     const now = performance.now();
     const dt = now - this.touchStartTime;
     const touches = this.touchStartPos;
 
     if (touches.length === 0) return;
-
-    if (touches.length === 2) {
-      // two-finger tap = airstrike (if quick)
-      if (dt < 350) {
-        this.cb.onAirstrike();
-        this.vibrate(400);
-      }
-      return;
-    }
 
     const p0 = touches[0];
     const end = e.changedTouches[0];
@@ -297,23 +276,14 @@ export class MobileControls {
     const dy = end.clientY - p0.y;
     const dist = Math.hypot(dx, dy);
 
-    // Split zones: LEFT = aim (drag) + tap = fire, RIGHT = change gun.
+    // Right side has dedicated PUBG buttons — ignore raw screen taps there to prevent accidental triggers
     const isRightZone = p0.x >= window.innerWidth * 0.55;
     if (isRightZone) {
-      // quick stationary tap on the RIGHT cycles to the next weapon
-      if (dist < 14 && dt < 300) {
-        if (now - this.lastRightTap < 340) {
-          this.cb.onSwitchWeapon(1);
-          this.rightZoneTaps = 0;
-        } else {
-          this.rightZoneTaps++;
-          this.cb.onSwitchWeapon(1);
-        }
-        this.lastRightTap = now;
-        this.vibrate(20);
-      }
-    } else if (dist < 14 && dt < 300) {
-      // quick stationary tap on the LEFT fires the current gun
+      return;
+    }
+
+    // Optional quick stationary tap on the left side fires current gun
+    if (dist < 12 && dt < 250) {
       this.cb.onFireStart();
       this.cb.onFireEnd();
     }

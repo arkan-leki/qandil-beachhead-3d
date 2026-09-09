@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Volume2, VolumeX, ZoomIn, Plane } from 'lucide-react';
+import { Volume2, VolumeX, Plane, Crosshair } from 'lucide-react';
 import { GameStats, Language, RadarBlip, WeaponState, WeaponType } from '../types';
 import { RadarHUD } from './RadarHUD';
 import { I18N } from '../i18n';
@@ -149,11 +149,10 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
         paddingRight: 'max(0.75rem, env(safe-area-inset-right))',
       }}
     >
-      {/* ---- Split-zone hints (touch only): LEFT = aim, RIGHT = gun ---- */}
+      {/* ---- Split-zone hints (touch only): LEFT = aim ---- */}
       {isTouch && (
-        <div className="absolute inset-x-0 bottom-40 sm:bottom-44 flex justify-between px-3 pointer-events-none">
-          <div className="font-mono text-[9px] sm:text-[10px] text-emerald-300/70 bg-black/40 px-2 py-0.5 rounded tracking-widest">{t.dragAimHint}</div>
-          <div className="font-mono text-[9px] sm:text-[10px] text-amber-300/70 bg-black/40 px-2 py-0.5 rounded tracking-widest">{t.tapGunHint}</div>
+        <div className="absolute inset-x-0 bottom-44 sm:bottom-48 flex justify-between px-3 pointer-events-none">
+          <div className="font-mono text-[9px] sm:text-[10px] text-emerald-300/80 bg-black/50 px-2 py-0.5 rounded border border-emerald-500/30 tracking-widest">{t.dragAimHint}</div>
         </div>
       )}
 
@@ -223,29 +222,9 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
           </div>
         </div>
 
-        {/* Top-right: minimal action buttons */}
+        {/* Top-right: utility action buttons */}
         <div className="flex flex-col items-end gap-2 pointer-events-auto">
           <div className="flex gap-1.5">
-            <button
-              onClick={onAirstrike}
-              disabled={airstrikesAvailable <= 0}
-              className={`w-9 h-9 rounded flex items-center justify-center border text-xs ${
-                airstrikesAvailable > 0 ? 'bg-red-950/80 border-red-500/70 text-red-300 animate-pulse' : 'bg-zinc-900/60 border-zinc-800 text-zinc-600'
-              }`}
-              title={t.airstrikeTitle(airstrikesAvailable)}
-            >
-              <Plane className="w-4 h-4" />
-            </button>
-            <button
-              onClick={onKamikaze}
-              disabled={!kamikazeReady}
-              className={`w-9 h-9 rounded flex items-center justify-center border text-xs ${
-                kamikazeReady ? 'bg-orange-950/80 border-orange-500/80 text-orange-300 animate-pulse' : 'bg-zinc-900/60 border-zinc-800 text-zinc-600'
-              }`}
-              title={t.kamikazeTitle}
-            >
-              🚁
-            </button>
             <button
               onClick={onFlare}
               className={`w-9 h-9 rounded flex items-center justify-center border text-base transition-all ${
@@ -256,13 +235,6 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
               title={t.flareTitle}
             >
               🔥
-            </button>
-            <button
-              onClick={onToggleZoom}
-              className="w-9 h-9 rounded flex items-center justify-center border border-zinc-700 bg-black/60 text-zinc-200"
-              title={t.zoomTitle(zoomLevel)}
-            >
-              <ZoomIn className="w-4 h-4" />
             </button>
             <button
               onClick={onToggleMute}
@@ -396,18 +368,140 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
           </div>
         </div>
 
-        {/* Fire button (pointer events avoid double-firing from touch+mouse) */}
-        <div className="pointer-events-auto flex flex-col items-end gap-1">
-          <button
-            onPointerDown={onFireStart}
-            onPointerUp={onFireEnd}
-            onPointerLeave={onFireEnd}
-            onPointerCancel={onFireEnd}
-            className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-linear-to-b from-red-600 to-red-800 border-4 border-amber-500/80 shadow-2xl flex flex-col items-center justify-center text-white active:scale-95 transition-transform cursor-pointer"
-          >
-            <span className="text-lg leading-none mb-0.5">🔥</span>
-            <span className="text-[9px] font-bold font-mono tracking-wider">{t.fire}</span>
-          </button>
+        {/* PUBG-Style Combat Control Cluster in the Bottom-Right Corner */}
+        <div className="pointer-events-auto flex items-end gap-2 sm:gap-3 select-none">
+          {/* Tactical Support Column: Air Attack (Airstrike) & Kamikaze Drone */}
+          <div className="flex flex-col items-center gap-2">
+            {/* Air Attack (Airstrike) Button */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onAirstrike && airstrikesAvailable > 0) {
+                  onAirstrike();
+                  if (navigator.vibrate) navigator.vibrate(250);
+                }
+              }}
+              disabled={airstrikesAvailable <= 0}
+              className={`relative w-12 h-12 sm:w-14 sm:h-14 rounded-full flex flex-col items-center justify-center transition-all cursor-pointer select-none ${
+                airstrikesAvailable > 0
+                  ? 'bg-linear-to-b from-red-950 via-red-900 to-zinc-950 border-2 border-red-500/90 text-red-200 shadow-[0_0_15px_rgba(239,68,68,0.5)] active:scale-92 active:border-red-400'
+                  : 'bg-zinc-900/80 border border-zinc-800 text-zinc-600 opacity-40 cursor-not-allowed'
+              }`}
+              title={t.airstrikeTitle(airstrikesAvailable)}
+            >
+              <Plane className={`w-4 h-4 sm:w-5 sm:h-5 -rotate-45 ${airstrikesAvailable > 0 ? 'text-red-400 animate-pulse' : 'text-zinc-600'}`} />
+              <span className="font-mono text-[7px] sm:text-[8px] font-black tracking-wider leading-none mt-0.5">
+                {t.airAttack}
+              </span>
+              {/* Badge: remaining strikes */}
+              <span
+                className={`absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full flex items-center justify-center font-mono text-[8px] sm:text-[9px] font-black border ${
+                  airstrikesAvailable > 0
+                    ? 'bg-red-500 text-white border-red-300 shadow-[0_0_8px_rgba(239,68,68,0.8)]'
+                    : 'bg-zinc-800 text-zinc-500 border-zinc-700'
+                }`}
+              >
+                {airstrikesAvailable}
+              </span>
+            </button>
+
+            {/* Drone (Kamikaze) Button */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onKamikaze && kamikazeReady) {
+                  onKamikaze();
+                  if (navigator.vibrate) navigator.vibrate(200);
+                }
+              }}
+              disabled={!kamikazeReady}
+              className={`relative w-12 h-12 sm:w-14 sm:h-14 rounded-full flex flex-col items-center justify-center transition-all cursor-pointer select-none ${
+                kamikazeReady
+                  ? 'bg-linear-to-b from-orange-950 via-amber-950 to-zinc-950 border-2 border-orange-500/90 text-orange-200 shadow-[0_0_15px_rgba(249,115,22,0.5)] active:scale-92 active:border-orange-300'
+                  : 'bg-zinc-900/80 border border-zinc-800 text-zinc-600 opacity-40 cursor-not-allowed'
+              }`}
+              title={t.kamikazeTitle}
+            >
+              <span className="text-lg sm:text-xl leading-none">🚁</span>
+              <span className="font-mono text-[7px] sm:text-[8px] font-black tracking-wider leading-none mt-0.5">
+                {t.drone}
+              </span>
+              {/* Badge: status */}
+              <span
+                className={`absolute -top-1 -right-1 px-1 rounded-full flex items-center justify-center font-mono text-[7px] sm:text-[8px] font-bold border ${
+                  kamikazeReady
+                    ? 'bg-orange-500 text-black border-amber-300 shadow-[0_0_8px_rgba(249,115,22,0.8)]'
+                    : 'bg-zinc-800 text-zinc-500 border-zinc-700'
+                }`}
+              >
+                {kamikazeReady ? t.ready : t.cooldown}
+              </span>
+            </button>
+          </div>
+
+          {/* Primary Combat Column: Scope (ADS) & Fire */}
+          <div className="flex flex-col items-center gap-2">
+            {/* Scope / Zoom Button (PUBG ADS Position: directly above Fire) */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleZoom();
+                if (navigator.vibrate) navigator.vibrate(30);
+              }}
+              className={`relative w-12 h-12 sm:w-14 sm:h-14 rounded-full flex flex-col items-center justify-center transition-all cursor-pointer select-none ${
+                zoomLevel > 1
+                  ? 'bg-linear-to-b from-amber-950 via-yellow-950 to-zinc-950 border-2 border-amber-400 text-amber-200 shadow-[0_0_18px_rgba(245,158,11,0.65)] ring-2 ring-amber-500/50 active:scale-92'
+                  : 'bg-zinc-900/90 hover:bg-zinc-800/90 border-2 border-zinc-600 text-zinc-200 active:scale-92'
+              }`}
+              title={t.zoomTitle(zoomLevel)}
+            >
+              <Crosshair className={`w-4 h-4 sm:w-5 sm:h-5 ${zoomLevel > 1 ? 'text-amber-400' : 'text-zinc-300'}`} />
+              <span className="font-mono text-[7px] sm:text-[8px] font-black tracking-wider leading-none mt-0.5">
+                {t.scope}
+              </span>
+              {/* Dynamic magnification badge */}
+              <span
+                className={`absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full font-mono text-[8px] sm:text-[9px] font-black border ${
+                  zoomLevel > 1
+                    ? 'bg-amber-400 text-black border-amber-200 shadow-[0_0_8px_rgba(245,158,11,0.8)]'
+                    : 'bg-zinc-800 text-zinc-400 border-zinc-700'
+                }`}
+              >
+                {zoomLevel > 1 ? `${zoomLevel.toFixed(0)}X` : '1X'}
+              </span>
+            </button>
+
+            {/* Primary FIRE Button */}
+            <button
+              type="button"
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                onFireStart();
+              }}
+              onPointerUp={(e) => {
+                e.stopPropagation();
+                onFireEnd();
+              }}
+              onPointerLeave={(e) => {
+                e.stopPropagation();
+                onFireEnd();
+              }}
+              onPointerCancel={(e) => {
+                e.stopPropagation();
+                onFireEnd();
+              }}
+              className="relative w-18 h-18 sm:w-22 sm:h-22 rounded-full bg-linear-to-b from-red-500 via-red-600 to-red-900 border-4 border-amber-400/90 shadow-[0_0_24px_rgba(239,68,68,0.7)] flex flex-col items-center justify-center text-white active:scale-92 active:border-red-400 active:brightness-125 transition-all cursor-pointer select-none"
+              title={t.fire}
+            >
+              <span className="text-2xl sm:text-3xl leading-none -mb-0.5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">🔥</span>
+              <span className="text-[10px] sm:text-xs font-black font-mono tracking-widest text-amber-200 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
+                {t.fire}
+              </span>
+            </button>
+          </div>
         </div>
       </div>
 
