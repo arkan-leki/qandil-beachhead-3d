@@ -3350,15 +3350,18 @@ export class GameEngine {
   /* ================= RADAR DATA FOR HUD ================= */
   private updateRadarBlips() {
     const blips: RadarBlip[] = [];
-    const turretHeading = this.yaw;
+    // The player's camera look vector is (-sin(yaw), -cos(yaw)).
+    // In horizontal polar coordinates (North = 0 along -Z, East = +PI/2 along +X):
+    // atan2(lookX, -lookZ) = atan2(-sin(yaw), cos(yaw)) = -this.yaw.
+    const playerBearing = ((-this.yaw) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
 
     for (const e of this.enemies) {
       if (e.dead) continue;
       const dist = Math.hypot(e.position.x, e.position.z);
-      // World bearing angle (0 to 2*PI)
+      // World bearing angle from bunker origin
       const worldBearing = Math.atan2(e.position.x, -e.position.z);
-      // Angle relative to turret center view
-      let relAngle = worldBearing - turretHeading;
+      // Angle relative to player's eyesight boresight (0 = center crosshair, positive = right, negative = left)
+      let relAngle = worldBearing - playerBearing;
       while (relAngle > Math.PI) relAngle -= Math.PI * 2;
       while (relAngle < -Math.PI) relAngle += Math.PI * 2;
 
@@ -3376,7 +3379,7 @@ export class GameEngine {
       if (sd.dead) continue;
       const dist = Math.hypot(sd.position.x, sd.position.z);
       const worldBearing = Math.atan2(sd.position.x, -sd.position.z);
-      let relAngle = worldBearing - turretHeading;
+      let relAngle = worldBearing - playerBearing;
       while (relAngle > Math.PI) relAngle -= Math.PI * 2;
       while (relAngle < -Math.PI) relAngle += Math.PI * 2;
 
@@ -3390,7 +3393,7 @@ export class GameEngine {
       });
     }
 
-    const headingDeg = ((turretHeading * 180) / Math.PI + 360) % 360;
+    const headingDeg = ((playerBearing * 180) / Math.PI + 360) % 360;
     const pitchDeg = Math.round((this.pitch * 180) / Math.PI);
     if (this.onRadarUpdate) {
       this.onRadarUpdate(blips, headingDeg, pitchDeg);

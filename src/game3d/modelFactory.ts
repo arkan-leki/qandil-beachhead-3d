@@ -2715,9 +2715,9 @@ export function createMountainTerrain(): {
   terrainGroup.name = 'qandil_mountains';
 
   // Ground plane resolution - expansive battlefield (higher res = smoother hills)
-  const width = 460;
-  const depth = 460;
-  const segments = 230;
+  const width = 500;
+  const depth = 500;
+  const segments = 250;
   const planeGeo = new THREE.PlaneGeometry(width, depth, segments, segments);
   planeGeo.rotateX(-Math.PI / 2);
 
@@ -2873,43 +2873,53 @@ export function createMountainTerrain(): {
   }
   const rockTex = new THREE.CanvasTexture(rockTexCanvas);
   rockTex.anisotropy = 8;
-  // Rocks live FAR from the battlefield so they never block sightlines to enemies.
-  // They form a rocky band near the distant rim (160–340m).
-  const rockCount = 70;
+  // Rocks live solidly on the battlefield plains and foothills (70–190m).
+  // Strictly bounded inside the solid terrain mesh (|x| <= 190, |z| <= 190) so none ever float in the sky.
+  const rockCount = 65;
   for (let r = 0; r < rockCount; r++) {
-    // Bias outward: ring from ~160m to ~340m
     const ang = Math.random() * Math.PI * 2;
-    const rad = 165 + Math.pow(Math.random(), 1.3) * 175;
+    // Naturally distributed across middle and outer terrain
+    const rad = 72 + Math.random() * 118; // 72m to 190m
     const rx = Math.sin(ang) * rad;
     const rz = Math.cos(ang) * rad;
-    const dist = Math.hypot(rx, rz);
-    if (dist < 150) continue; // keep the whole combat zone clear of sight blockers
 
-    const ry = getHeightAt(rx, rz);
+    if (Math.abs(rx) > 190 || Math.abs(rz) > 190) continue;
+
+    // Sample multiple points around the rock footprint to find the lowest local ground height
+    const h0 = getHeightAt(rx, rz);
+    const h1 = getHeightAt(rx + 1.6, rz);
+    const h2 = getHeightAt(rx - 1.6, rz);
+    const h3 = getHeightAt(rx, rz + 1.6);
+    const h4 = getHeightAt(rx, rz - 1.6);
+    const minGround = Math.min(h0, h1, h2, h3, h4);
+
     const rockMat = new THREE.MeshStandardMaterial({ map: rockTex, color: 0xffffff, roughness: 0.92, flatShading: true });
     const rockMesh = new THREE.Mesh(rockGeo, rockMat);
-    const scale = 1.6 + Math.random() * 2.6;
-    rockMesh.scale.set(scale * 1.1, scale * 0.7, scale * 0.9);
-    rockMesh.position.set(rx, ry + scale * 0.35, rz);
-    rockMesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+    const scale = 1.0 + Math.random() * 2.2;
+    const scaleY = scale * 0.65;
+    rockMesh.scale.set(scale * 1.05, scaleY, scale * 0.95);
+    // Firmly embed the boulder into the ground so its base is submerged well below minGround
+    rockMesh.position.set(rx, minGround + scaleY * 0.12, rz);
+    // Stable upright rotation with subtle natural tilt
+    rockMesh.rotation.set((Math.random() - 0.5) * 0.18, Math.random() * Math.PI * 2, (Math.random() - 0.5) * 0.18);
     terrainGroup.add(rockMesh);
   }
 
-  // Scattered low shrubs on the plains
+  // Scattered low shrubs on the plains - firmly seated on the ground
   const shrubGeo = new THREE.DodecahedronGeometry(0.7, 1);
   const shrubCount = 65;
   for (let s = 0; s < shrubCount; s++) {
-    const sx = (Math.random() - 0.5) * 280;
-    const sz = (Math.random() - 0.5) * 280;
+    const sx = (Math.random() - 0.5) * 260;
+    const sz = (Math.random() - 0.5) * 260;
     const dist = Math.hypot(sx, sz);
-    if (dist < 72) continue;
+    if (dist < 72 || dist > 185) continue;
 
     const sy = getHeightAt(sx, sz);
     const shrubMat = new THREE.MeshStandardMaterial({ color: 0x486435, roughness: 0.95 });
     const shrubMesh = new THREE.Mesh(shrubGeo, shrubMat);
     const scale = 0.8 + Math.random() * 1.2;
     shrubMesh.scale.set(scale, scale * 0.7, scale);
-    shrubMesh.position.set(sx, sy + scale * 0.35, sz);
+    shrubMesh.position.set(sx, sy + scale * 0.15, sz);
     terrainGroup.add(shrubMesh);
   }
 
