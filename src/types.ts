@@ -85,6 +85,17 @@ export interface EnemyEntity {
   strafePhase?: 'approach' | 'pass' | 'exit'; // jet strafe pass phases
   burstLeft?: number;      // remaining shots in the current strafe burst
   burstTimer?: number;
+  smokeTimer?: number;     // for damaged vehicle smoke puff intervals
+}
+
+export interface TankWreckage {
+  id: number;
+  meshGroup: any;          // THREE.Group
+  position: { x: number; y: number; z: number };
+  type: EnemyType;
+  smokeTimer: number;
+  fireTimer: number;
+  life: number;
 }
 
 export interface ProjectileEntity {

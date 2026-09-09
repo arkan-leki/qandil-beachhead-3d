@@ -14,6 +14,7 @@ import {
   ProjectileEntity,
   RadarBlip,
   SupplyDropEntity,
+  TankWreckage,
   WaveConfig,
   WeaponState,
   WeaponType,
@@ -293,6 +294,7 @@ export class GameEngine {
   private supplyDropTimer: number = 25; // seconds until first supply drop
   private projectiles: ProjectileEntity[] = [];
   private particles: ParticleEntity[] = [];
+  private wreckages: TankWreckage[] = [];
   private nextEntityId: number = 1;
   private getHeightAt: (x: number, z: number) => number;
 
@@ -303,8 +305,8 @@ export class GameEngine {
   private smokeMat: THREE.PointsMaterial;
   private glowPoints: THREE.Points;
   private smokePoints: THREE.Points;
-  private readonly MAX_PARTICLES = 350;
-  private readonly SMOKE_CAP = 160;
+  private readonly MAX_PARTICLES = 600;
+  private readonly SMOKE_CAP = 360;
   // Floating damage/score text sprites
   private floaters: { sprite: THREE.Sprite; life: number; maxLife: number }[] = [];
 
@@ -818,6 +820,13 @@ export class GameEngine {
     }
     this.floaters = [];
 
+    for (const w of this.wreckages) {
+      if (w.meshGroup) {
+        this.scene.remove(w.meshGroup);
+      }
+    }
+    this.wreckages = [];
+
     this.echelons = [];
     this.stats.activeThreats = 0;
     this.stats.remainingWaveEnemies = 0;
@@ -1185,7 +1194,7 @@ export class GameEngine {
 
       const localMuzzle = isLeft ? this.muzzlePoints.left : this.muzzlePoints.right;
       const worldMuzzle = localMuzzle.clone().applyMatrix4(this.turretPitchGroup.matrixWorld);
-      this.spawnMuzzleFlash(worldMuzzle, 0.9, '#ffd27a');
+      this.spawnMuzzleFlash(worldMuzzle, 1.1, '#ffd020');
 
       this.spawnPlayerProjectile('player_bullet', fireOrigin, dir, w.projectileSpeed, w.damage, w.splashRadius);
       this.screenShake = Math.min(0.22, this.screenShake + 0.04);
@@ -1212,7 +1221,7 @@ export class GameEngine {
         : (this.aaBarrelPhase ? this.muzzlePoints.right : this.muzzlePoints.right2);
       const worldMuzzle = localMuzzle.clone().applyMatrix4(this.turretPitchGroup.matrixWorld);
 
-      this.spawnMuzzleFlash(worldMuzzle, 0.8, '#ffcc44');
+      this.spawnMuzzleFlash(worldMuzzle, 1.3, '#ffcc22');
 
       // Create high-velocity 23mm tracer projectile
       this.spawnPlayerProjectile('player_bullet', fireOrigin, dir, w.projectileSpeed, w.damage, w.splashRadius);
@@ -1231,7 +1240,7 @@ export class GameEngine {
 
       const worldMuzzle = (this.cannonSide ? this.muzzlePoints.cannonL : this.muzzlePoints.cannonR)
         .clone().applyMatrix4(this.turretPitchGroup.matrixWorld);
-      this.spawnMuzzleFlash(worldMuzzle, 2.2, '#ff8822');
+      this.spawnMuzzleFlash(worldMuzzle, 2.6, '#ffa511');
 
       this.spawnPlayerProjectile('player_cannon', fireOrigin, dir, w.projectileSpeed, w.damage, w.splashRadius);
       this.screenShake = Math.min(0.65, this.screenShake + 0.35);
@@ -1244,7 +1253,7 @@ export class GameEngine {
       const localMuzzle = isLeft ? this.muzzlePoints.rocketL : this.muzzlePoints.rocketR;
       const worldMuzzle = localMuzzle.clone().applyMatrix4(this.turretPitchGroup.matrixWorld);
 
-      this.spawnMuzzleFlash(worldMuzzle, 1.4, '#ffaa33');
+      this.spawnMuzzleFlash(worldMuzzle, 1.8, '#ff9922');
 
       // Find best target near crosshair for homing guidance
       const target = this.findTargetInCrosshair(dir);
@@ -1259,7 +1268,7 @@ export class GameEngine {
 
       const localMuzzle = this.muzzlePoints.center.clone();
       const worldMuzzle = localMuzzle.clone().applyMatrix4(this.turretPitchGroup.matrixWorld);
-      this.spawnMuzzleFlash(worldMuzzle, 0.6, '#ffd9a0');
+      this.spawnMuzzleFlash(worldMuzzle, 0.8, '#ffe444');
 
       this.spawnPlayerProjectile('player_bullet', fireOrigin, dir, w.projectileSpeed, w.damage, w.splashRadius);
       this.screenShake = Math.min(0.14, this.screenShake + 0.03);
@@ -1306,7 +1315,7 @@ export class GameEngine {
     if (!GameEngine.playerBulletGeo) {
       GameEngine.playerBulletGeo = new THREE.CylinderGeometry(0.06, 0.06, 1.2, 6);
       GameEngine.playerBulletGeo.rotateX(Math.PI / 2);
-      GameEngine.playerBulletMat = new THREE.MeshBasicMaterial({ color: 0xfff0aa });
+      GameEngine.playerBulletMat = new THREE.MeshBasicMaterial({ color: 0xffea33 });
     }
     return new THREE.Mesh(GameEngine.playerBulletGeo, GameEngine.playerBulletMat!);
   }
@@ -1315,7 +1324,7 @@ export class GameEngine {
     if (!GameEngine.playerCannonGeo) {
       GameEngine.playerCannonGeo = new THREE.CylinderGeometry(0.18, 0.18, 1.8, 8);
       GameEngine.playerCannonGeo.rotateX(Math.PI / 2);
-      GameEngine.playerCannonMat = new THREE.MeshBasicMaterial({ color: 0xff9922 });
+      GameEngine.playerCannonMat = new THREE.MeshBasicMaterial({ color: 0xffbb22 });
     }
     return new THREE.Mesh(GameEngine.playerCannonGeo, GameEngine.playerCannonMat!);
   }
@@ -1366,25 +1375,46 @@ export class GameEngine {
   }
 
   private spawnMuzzleFlash(pos: THREE.Vector3, scale: number, color: string) {
-    // Bright directional flash burst + small fan of sparks
+    // 1. Blinding incandescent white-hot core
     this.particles.push({
-      x: pos.x, y: pos.y, z: pos.z, vx: 0, vy: (Math.random() - 0.5) * 1.5, vz: 0,
-      color: '#fffbe0', size: scale * 3.4, life: 0, maxLife: 0.09,
+      x: pos.x, y: pos.y, z: pos.z, vx: 0, vy: (Math.random() - 0.5) * 0.8, vz: 0,
+      color: '#ffffff', size: scale * 4.2, life: 0, maxLife: 0.08,
     });
-    for (let i = 0; i < 3; i++) {
+    // 2. Vivid golden-yellow fireball burst (Beach Head 2000 incandescent blast)
+    this.particles.push({
+      x: pos.x, y: pos.y, z: pos.z, vx: (Math.random() - 0.5) * 1.0, vy: (Math.random() - 0.5) * 1.0, vz: (Math.random() - 0.5) * 1.0,
+      color: '#ffea28', size: scale * 6.0, life: 0, maxLife: 0.11,
+    });
+    // 3. High-velocity fiery flame petals / sparks in yellow and hot amber
+    const sparkCount = Math.round(5 * Math.max(1, scale * 0.8));
+    for (let i = 0; i < sparkCount; i++) {
       this.particles.push({
-        x: pos.x + (Math.random() - 0.5) * 0.4,
-        y: pos.y + (Math.random() - 0.5) * 0.4,
-        z: pos.z + (Math.random() - 0.5) * 0.4,
-        vx: (Math.random() - 0.5) * 4,
-        vy: (Math.random() - 0.5) * 4,
-        vz: (Math.random() - 0.5) * 4,
-        color,
-        size: scale * (0.9 + Math.random() * 0.5),
+        x: pos.x + (Math.random() - 0.5) * 0.3 * scale,
+        y: pos.y + (Math.random() - 0.5) * 0.3 * scale,
+        z: pos.z + (Math.random() - 0.5) * 0.3 * scale,
+        vx: (Math.random() - 0.5) * 7.5,
+        vy: (Math.random() - 0.5) * 7.5,
+        vz: (Math.random() - 0.5) * 7.5,
+        color: Math.random() < 0.7 ? '#ffd410' : '#ff9400',
+        size: scale * (0.8 + Math.random() * 0.7),
         life: 0,
-        maxLife: 0.14,
+        maxLife: 0.16,
       });
     }
+    // 4. Wispy gun smoke puff dispersing from muzzle
+    this.particles.push({
+      x: pos.x + (Math.random() - 0.5) * 0.2,
+      y: pos.y + 0.1,
+      z: pos.z + (Math.random() - 0.5) * 0.2,
+      vx: (Math.random() - 0.5) * 1.5,
+      vy: 1.2 + Math.random() * 1.2,
+      vz: (Math.random() - 0.5) * 1.5,
+      color: '#dedad2',
+      size: scale * 3.2,
+      life: 0,
+      maxLife: 0.45,
+      smoke: true,
+    });
   }
 
   private shuffleArray<T>(arr: T[]): T[] {
@@ -2314,6 +2344,43 @@ export class GameEngine {
         e.meshGroup.position.set(e.position.x, e.position.y, e.position.z);
         e.meshGroup.lookAt(0, e.position.y, 0);
 
+        // Damaged tank smoke and fire sparks
+        if (e.hp < e.maxHp * 0.75) {
+          const isCritical = e.hp < e.maxHp * 0.45;
+          e.smokeTimer = (e.smokeTimer || 0) + dt;
+          const interval = isCritical ? 0.09 : 0.18;
+          if (e.smokeTimer >= interval) {
+            e.smokeTimer = 0;
+            this.particles.push({
+              x: e.position.x + (Math.random() - 0.5) * 1.6,
+              y: e.position.y + 2.2 + Math.random() * 0.4,
+              z: e.position.z + (Math.random() - 0.5) * 1.6,
+              vx: (Math.random() - 0.5) * 1.2,
+              vy: 2.8 + Math.random() * 2.2,
+              vz: (Math.random() - 0.5) * 1.2,
+              color: isCritical ? '#141414' : '#454545',
+              size: isCritical ? 2.8 + Math.random() * 1.8 : 1.8 + Math.random() * 1.2,
+              life: 0,
+              maxLife: isCritical ? 1.8 : 1.1,
+              smoke: true,
+            });
+            if (isCritical && Math.random() < 0.5) {
+              this.particles.push({
+                x: e.position.x + (Math.random() - 0.5) * 1.0,
+                y: e.position.y + 2.0,
+                z: e.position.z + (Math.random() - 0.5) * 1.0,
+                vx: (Math.random() - 0.5) * 2.5,
+                vy: 2.5 + Math.random() * 2.2,
+                vz: (Math.random() - 0.5) * 2.5,
+                color: Math.random() < 0.6 ? '#ff9900' : '#ffcc11',
+                size: 0.8 + Math.random() * 0.6,
+                life: 0,
+                maxLife: 0.35,
+              });
+            }
+          }
+        }
+
         // Tank main gun firing at mountain redoubt
         if (performance.now() - e.lastFireTime > e.fireCooldown * 1000) {
           e.lastFireTime = performance.now();
@@ -2400,6 +2467,43 @@ export class GameEngine {
 
         e.meshGroup.position.set(e.position.x, e.position.y, e.position.z);
         e.meshGroup.lookAt(0, e.position.y, 0);
+
+        // Damaged APC smoke and fire sparks
+        if (e.hp < e.maxHp * 0.75) {
+          const isCritical = e.hp < e.maxHp * 0.45;
+          e.smokeTimer = (e.smokeTimer || 0) + dt;
+          const interval = isCritical ? 0.09 : 0.18;
+          if (e.smokeTimer >= interval) {
+            e.smokeTimer = 0;
+            this.particles.push({
+              x: e.position.x + (Math.random() - 0.5) * 1.4,
+              y: e.position.y + 1.8 + Math.random() * 0.3,
+              z: e.position.z + (Math.random() - 0.5) * 1.4,
+              vx: (Math.random() - 0.5) * 1.2,
+              vy: 2.5 + Math.random() * 2.0,
+              vz: (Math.random() - 0.5) * 1.2,
+              color: isCritical ? '#141414' : '#454545',
+              size: isCritical ? 2.5 + Math.random() * 1.5 : 1.6 + Math.random() * 1.0,
+              life: 0,
+              maxLife: isCritical ? 1.6 : 1.0,
+              smoke: true,
+            });
+            if (isCritical && Math.random() < 0.5) {
+              this.particles.push({
+                x: e.position.x + (Math.random() - 0.5) * 0.9,
+                y: e.position.y + 1.6,
+                z: e.position.z + (Math.random() - 0.5) * 0.9,
+                vx: (Math.random() - 0.5) * 2.5,
+                vy: 2.2 + Math.random() * 2.0,
+                vz: (Math.random() - 0.5) * 2.5,
+                color: Math.random() < 0.6 ? '#ff9900' : '#ffcc11',
+                size: 0.7 + Math.random() * 0.5,
+                life: 0,
+                maxLife: 0.35,
+              });
+            }
+          }
+        }
 
         // APC 30mm autocannon bursts
         if (performance.now() - e.lastFireTime > e.fireCooldown * 1000) {
@@ -2587,6 +2691,9 @@ export class GameEngine {
     );
     const dir = target.sub(origin).normalize();
 
+    // Searing yellow muzzle flash from tank cannon
+    this.spawnMuzzleFlash(origin, 2.6, '#ffaa22');
+
     this.spawnEnemyProjectile('enemy_shell', origin, dir, 70, Math.max(5, Math.round(18 * diff.damageMult * this.waveScale(this.stats.wave).damageMult)));
   }
 
@@ -2601,6 +2708,9 @@ export class GameEngine {
       (Math.random() - 0.5) * spread
     );
     const dir = target.sub(origin).normalize();
+
+    // Autocannon muzzle flash
+    this.spawnMuzzleFlash(origin, 1.4, '#ffcc33');
 
     this.spawnEnemyProjectile('enemy_bullet', origin, dir, 90, Math.max(2, Math.round(6 * diff.damageMult * this.waveScale(this.stats.wave).damageMult)));
   }
@@ -2910,7 +3020,11 @@ export class GameEngine {
 
     if (e.hp <= 0) {
       e.dead = true;
-      this.scene.remove(e.meshGroup);
+      if (e.type === 'tank' || e.type === 'apc') {
+        this.convertEnemyToWreckage(e);
+      } else {
+        this.scene.remove(e.meshGroup);
+      }
 
       // Track kills and score
       this.stats.score += e.scoreValue;
@@ -2940,6 +3054,102 @@ export class GameEngine {
       this.createExplosion(e.position.x, e.position.y, e.position.z, explosionSize);
 
       if (this.onStatsUpdate) this.onStatsUpdate(this.stats);
+    }
+  }
+
+  private convertEnemyToWreckage(e: EnemyEntity) {
+    // Keep max 28 persistent wreckages across the battlefield to guarantee steady high performance
+    if (this.wreckages.length >= 28) {
+      const oldest = this.wreckages.shift();
+      if (oldest && oldest.meshGroup) {
+        this.scene.remove(oldest.meshGroup);
+      }
+    }
+
+    // Traverse mesh and darken all surfaces to charred, battle-burned black steel
+    const charredSteelMat = new THREE.MeshStandardMaterial({
+      color: 0x181818,
+      roughness: 0.95,
+      metalness: 0.15,
+    });
+    const scorchedTrimMat = new THREE.MeshStandardMaterial({
+      color: 0x0a0a0a,
+      roughness: 0.98,
+      metalness: 0.05,
+    });
+
+    e.meshGroup.traverse((child: any) => {
+      if (child.isMesh) {
+        child.material = Math.random() < 0.65 ? charredSteelMat : scorchedTrimMat;
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+
+    // Knock turret askew, depress blown cannon barrel, and settle listing chassis into the dirt
+    if (e.turretMesh) {
+      e.turretMesh.rotation.y += (Math.random() - 0.5) * 1.6;
+      e.turretMesh.rotation.z += (Math.random() - 0.5) * 0.35;
+    }
+    if (e.cannonMesh) {
+      e.cannonMesh.rotation.x = 0.28 + Math.random() * 0.35; // slumped downward
+    }
+    e.meshGroup.rotation.x += (Math.random() - 0.5) * 0.22;
+    e.meshGroup.rotation.z += (Math.random() - 0.5) * 0.22;
+    e.meshGroup.position.y = Math.max(0, e.position.y - 0.25);
+
+    this.wreckages.push({
+      id: e.id,
+      meshGroup: e.meshGroup,
+      position: { x: e.position.x, y: e.meshGroup.position.y, z: e.position.z },
+      type: e.type,
+      smokeTimer: 0,
+      fireTimer: 0,
+      life: 0,
+    });
+  }
+
+  private updateWreckages(dt: number) {
+    for (let i = 0; i < this.wreckages.length; i++) {
+      const w = this.wreckages[i];
+      w.life += dt;
+      w.smokeTimer += dt;
+      w.fireTimer += dt;
+
+      // Heavy billowing dark smoke pillar rising high over the field (Beach Head 2000 style)
+      if (w.smokeTimer >= 0.08) {
+        w.smokeTimer = 0;
+        this.particles.push({
+          x: w.position.x + (Math.random() - 0.5) * 1.6,
+          y: w.position.y + 1.6 + Math.random() * 0.4,
+          z: w.position.z + (Math.random() - 0.5) * 1.6,
+          vx: (Math.random() - 0.5) * 1.2,
+          vy: 3.5 + Math.random() * 2.8,
+          vz: (Math.random() - 0.5) * 1.2,
+          color: Math.random() < 0.65 ? '#151515' : '#2a2a2a',
+          size: 3.2 + Math.random() * 2.2,
+          life: 0,
+          maxLife: 2.2,
+          smoke: true,
+        });
+      }
+
+      // Burning ember tongues and flame flickering at the blown engine/hatch
+      if (w.fireTimer >= 0.12) {
+        w.fireTimer = 0;
+        this.particles.push({
+          x: w.position.x + (Math.random() - 0.5) * 1.2,
+          y: w.position.y + 1.2 + Math.random() * 0.8,
+          z: w.position.z + (Math.random() - 0.5) * 1.2,
+          vx: (Math.random() - 0.5) * 2.5,
+          vy: 2.4 + Math.random() * 2.2,
+          vz: (Math.random() - 0.5) * 2.5,
+          color: Math.random() < 0.5 ? '#ffaa11' : (Math.random() < 0.6 ? '#ff6600' : '#ff3300'),
+          size: 0.9 + Math.random() * 0.6,
+          life: 0,
+          maxLife: 0.4,
+        });
+      }
     }
   }
 
@@ -3473,6 +3683,7 @@ export class GameEngine {
       this.updateProjectiles(dt);
     }
     this.updateParticles(dt);
+    this.updateWreckages(dt);
     this.updateFloaters(dt);
     this.updateRadarBlips();
     this.updateFlares(dt);

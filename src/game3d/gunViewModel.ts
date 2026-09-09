@@ -15,9 +15,51 @@ interface UnitRefs {
   group: THREE.Group;
   base: THREE.Mesh;
   barrel: THREE.Mesh;
-  flash: THREE.Mesh;
+  flashGroup: THREE.Group;
+  flashMats: THREE.MeshBasicMaterial[];
   light: THREE.PointLight;
   pod: THREE.Group;
+}
+
+// Builds a multi-layered incandescent golden-yellow muzzle blast fireball (Beach Head 2000 style)
+function createGoldenMuzzleFlash(scaleMultiplier: number = 1.0): { group: THREE.Group; mats: THREE.MeshBasicMaterial[] } {
+  const group = new THREE.Group();
+  const mats: THREE.MeshBasicMaterial[] = [];
+
+  // 1. Incandescent white-hot core
+  const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 });
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.14 * scaleMultiplier, 8, 8), coreMat);
+  group.add(core);
+  mats.push(coreMat);
+
+  // 2. Searing golden-yellow fiery blast sphere (elongated along firing axis)
+  const fireballMat = new THREE.MeshBasicMaterial({ color: 0xffea22, transparent: true, opacity: 0 });
+  const fireball = new THREE.Mesh(new THREE.SphereGeometry(0.32 * scaleMultiplier, 10, 8), fireballMat);
+  fireball.scale.set(1.1, 1.1, 1.7);
+  fireball.position.set(0, 0, -0.16 * scaleMultiplier);
+  group.add(fireball);
+  mats.push(fireballMat);
+
+  // 3. Hot amber-orange outer blast cone
+  const coronaMat = new THREE.MeshBasicMaterial({ color: 0xff8800, transparent: true, opacity: 0 });
+  const corona = new THREE.Mesh(new THREE.ConeGeometry(0.34 * scaleMultiplier, 0.72 * scaleMultiplier, 8), coronaMat);
+  corona.rotation.x = -Math.PI / 2;
+  corona.position.set(0, 0, -0.34 * scaleMultiplier);
+  group.add(corona);
+  mats.push(coronaMat);
+
+  // 4. 4-pointed cross starburst petals (quad muzzle flash hider jets)
+  const petalMat = new THREE.MeshBasicMaterial({ color: 0xffcc11, transparent: true, opacity: 0, side: THREE.DoubleSide });
+  const petalGeo = new THREE.PlaneGeometry(0.72 * scaleMultiplier, 0.72 * scaleMultiplier);
+  const p1 = new THREE.Mesh(petalGeo, petalMat);
+  p1.position.set(0, 0, -0.15 * scaleMultiplier);
+  const p2 = new THREE.Mesh(petalGeo, petalMat);
+  p2.position.set(0, 0, -0.15 * scaleMultiplier);
+  p2.rotation.z = Math.PI / 4;
+  group.add(p1, p2);
+  mats.push(petalMat);
+
+  return { group, mats };
 }
 
 export class GunViewModel {
@@ -35,7 +77,8 @@ export class GunViewModel {
   private singleM60 = new THREE.Group();
   private singlePod = new THREE.Group();
   private handgun = new THREE.Group();
-  private singleFlash = new THREE.Mesh();
+  private singleFlashGroup = new THREE.Group();
+  private singleFlashMats: THREE.MeshBasicMaterial[] = [];
   private singleLight = new THREE.PointLight();
 
   // Recoil & animation
@@ -90,12 +133,15 @@ export class GunViewModel {
       rail.position.set(0, 0.12, -0.5);
       refs.group.add(rail);
 
-      const flashMat = new THREE.MeshBasicMaterial({ color: 0xffe066, transparent: true, opacity: 0 });
-      refs.flash = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 8), flashMat);
-      refs.flash.position.set(0, 0.03, -1.6);
-      refs.group.add(refs.flash);
+      // Multi-layer incandescent golden-yellow muzzle blast fireball
+      const { group: flashGroup, mats: flashMats } = createGoldenMuzzleFlash(1.0);
+      refs.flashGroup = flashGroup;
+      refs.flashMats = flashMats;
+      refs.flashGroup.position.set(0, 0.03, -1.6);
+      refs.group.add(refs.flashGroup);
 
-      refs.light = new THREE.PointLight(0xffaa33, 0, 8);
+      // Dynamic golden flash light that illuminates gun barrels and bunker
+      refs.light = new THREE.PointLight(0xffd020, 0, 14);
       refs.light.position.set(0, 0.03, -1.6);
       refs.group.add(refs.light);
 
@@ -207,12 +253,14 @@ export class GunViewModel {
 
     this.single.add(this.singleM60);
 
-    // single muzzle flash
-    const sFlashMat = new THREE.MeshBasicMaterial({ color: 0xffe066, transparent: true, opacity: 0 });
-    this.singleFlash = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), sFlashMat);
-    this.singleFlash.position.set(0, 0.01, -1.52);
-    this.single.add(this.singleFlash);
-    this.singleLight = new THREE.PointLight(0xffaa33, 0, 8);
+    // Single weapon golden muzzle flash assembly
+    const { group: sFlashGroup, mats: sFlashMats } = createGoldenMuzzleFlash(0.85);
+    this.singleFlashGroup = sFlashGroup;
+    this.singleFlashMats = sFlashMats;
+    this.singleFlashGroup.position.set(0, 0.01, -1.52);
+    this.single.add(this.singleFlashGroup);
+
+    this.singleLight = new THREE.PointLight(0xffd020, 0, 12);
     this.singleLight.position.set(0, 0.01, -1.52);
     this.single.add(this.singleLight);
 
@@ -303,16 +351,16 @@ export class GunViewModel {
 
     if (isTwin) {
       const flip = (refs: UnitRefs, on: boolean) => {
-        (refs.flash.material as THREE.MeshBasicMaterial).opacity = on ? 1.0 : 0;
-        refs.flash.scale.setScalar(on ? (1.0 + Math.random() * 0.8) : 1);
-        refs.light.intensity = on ? 4.5 * intensity : 0;
+        refs.flashMats.forEach((m) => { m.opacity = on ? 1.0 : 0; });
+        refs.flashGroup.scale.setScalar(on ? (1.0 + Math.random() * 0.7) : 1);
+        refs.light.intensity = on ? 7.5 * intensity : 0;
       };
       flip(this.left, this.lastSide < 0);
       flip(this.right, this.lastSide > 0);
     } else {
-      (this.singleFlash.material as THREE.MeshBasicMaterial).opacity = 1;
-      this.singleFlash.scale.setScalar(1.0 + Math.random() * 0.8);
-      this.singleLight.intensity = 4.5 * intensity;
+      this.singleFlashMats.forEach((m) => { m.opacity = 1.0; });
+      this.singleFlashGroup.scale.setScalar(1.0 + Math.random() * 0.7);
+      this.singleLight.intensity = 7.5 * intensity;
     }
 
     this.ejectCasing();
@@ -356,11 +404,11 @@ export class GunViewModel {
     if (this.muzzleFlashTimer > 0) {
       this.muzzleFlashTimer -= dt;
       if (this.muzzleFlashTimer <= 0) {
-        (this.left.flash.material as THREE.MeshBasicMaterial).opacity = 0;
-        (this.right.flash.material as THREE.MeshBasicMaterial).opacity = 0;
+        this.left.flashMats.forEach((m) => { m.opacity = 0; });
+        this.right.flashMats.forEach((m) => { m.opacity = 0; });
         this.left.light.intensity = 0;
         this.right.light.intensity = 0;
-        (this.singleFlash.material as THREE.MeshBasicMaterial).opacity = 0;
+        this.singleFlashMats.forEach((m) => { m.opacity = 0; });
         this.singleLight.intensity = 0;
       }
     }
