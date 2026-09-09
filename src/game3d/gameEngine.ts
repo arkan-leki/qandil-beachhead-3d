@@ -166,6 +166,7 @@ export class GameEngine {
   public pitch: number = 0.05; // Vertical radians (-0.25 to 0.9)
   public zoomLevel: number = 1.0; // 1.0x, 2.5x, 5.0x
   private isPointerLocked: boolean = false;
+  private lastPointerLockExit: number = 0;
   private isDragging: boolean = false;
   private lastPointerX: number = 0;
   private lastPointerY: number = 0;
@@ -203,7 +204,7 @@ export class GameEngine {
       lastFired: 0,
       damage: 14,
       splashRadius: 0.6,
-      projectileSpeed: 320,
+      projectileSpeed: 300,
       spread: 0.035, // some drift at range
       unlimited: true, // infinite ammo, but overheats
       reloading: false,
@@ -221,7 +222,7 @@ export class GameEngine {
       lastFired: 0,
       damage: 18,
       splashRadius: 1.0,
-      projectileSpeed: 220,
+      projectileSpeed: 250,
       spread: 0.02,
       unlimited: false,
       reloading: false,
@@ -237,7 +238,7 @@ export class GameEngine {
       lastFired: 0,
       damage: 150,
       splashRadius: 8.0,
-      projectileSpeed: 160,
+      projectileSpeed: 110, // Heavy artillery shell: slow, visible arcing trajectory
       spread: 0.006,
       unlimited: false,
       reloading: false,
@@ -253,7 +254,7 @@ export class GameEngine {
       lastFired: 0,
       damage: 280,
       splashRadius: 12.0,
-      projectileSpeed: 95,
+      projectileSpeed: 75, // Accelerating rocket
       spread: 0.0, // homing
       unlimited: false,
       reloading: false,
@@ -270,7 +271,7 @@ export class GameEngine {
       lastFired: 0,
       damage: 34,
       splashRadius: 0.3,
-      projectileSpeed: 240,
+      projectileSpeed: 120, // Heavy subsonic .45 round: slow, visible flight & ground ricochets
       spread: 0.008, // very accurate, low damage fallback
       unlimited: true, // infinite reserve, 7-round mag + reload
       reloading: false,
@@ -338,10 +339,14 @@ export class GameEngine {
   };
 
   // Shared projectile assets (cached to prevent thousands of GPU allocations per minute)
-  private static playerBulletGeo: THREE.CylinderGeometry | null = null;
-  private static playerBulletMat: THREE.MeshBasicMaterial | null = null;
+  private static playerM60Geo: THREE.CylinderGeometry | null = null;
+  private static playerM60Mat: THREE.MeshBasicMaterial | null = null;
+  private static playerAAGeo: THREE.CylinderGeometry | null = null;
+  private static playerAAMat: THREE.MeshBasicMaterial | null = null;
   private static playerCannonGeo: THREE.CylinderGeometry | null = null;
   private static playerCannonMat: THREE.MeshBasicMaterial | null = null;
+  private static playerHandgunGeo: THREE.CylinderGeometry | null = null;
+  private static playerHandgunMat: THREE.MeshBasicMaterial | null = null;
   private static playerMissileGeo: THREE.ConeGeometry | null = null;
   private static playerMissileMat: THREE.MeshStandardMaterial | null = null;
   private static enemyBulletGeo: THREE.SphereGeometry | null = null;
@@ -611,16 +616,41 @@ export class GameEngine {
     }, { passive: false });
 
     // Pointer lock synchronization for desktop mouse aim
-    document.addEventListener('pointerlockchange', () => {
-      this.isPointerLocked = document.pointerLockElement === el;
-    });
+    const onPointerLockChange = () => {
+      const isNowLocked = document.pointerLockElement === el;
+      if (this.isPointerLocked && !isNowLocked) {
+        // User exited pointer lock (e.g. pressed Escape or window blur)
+        this.lastPointerLockExit = performance.now();
+      }
+      this.isPointerLocked = isNowLocked;
+    };
+
+    const onPointerLockError = () => {
+      this.isPointerLocked = false;
+      this.lastPointerLockExit = performance.now();
+    };
+
+    document.addEventListener('pointerlockchange', onPointerLockChange);
+    document.addEventListener('pointerlockerror', onPointerLockError);
 
     // On desktop, clicking the viewport enters pointer lock for precision aim
     el.addEventListener('click', () => {
       if (!('ontouchstart' in window) && navigator.maxTouchPoints === 0 && document.pointerLockElement !== el) {
+        // Enforce browser-mandated cooldown (~1.25s) after exiting pointer lock to prevent DOMException
+        if (performance.now() - this.lastPointerLockExit < 1500) {
+          return;
+        }
         try {
-          el.requestPointerLock?.();
-        } catch { /* ignored */ }
+          const req = el.requestPointerLock?.();
+          if (req && typeof (req as Promise<void>).catch === 'function') {
+            (req as Promise<void>).catch(() => {
+              // Gracefully handle browser cooldown or user agent rejection
+              this.lastPointerLockExit = performance.now();
+            });
+          }
+        } catch {
+          this.lastPointerLockExit = performance.now();
+        }
       }
     });
 
@@ -1184,7 +1214,7 @@ export class GameEngine {
     const fireOrigin = new THREE.Vector3().copy(this.camera.position).addScaledVector(dir, 1.5);
 
     if (this.currentWeapon === 'm60') {
-      // M60 general purpose machine gun: rapid tracers from the left/right mount
+      // M60 general purpose machine gun: rapid red-orange tracers from the left/right mount
       this.aaAlternateBarrel = !this.aaAlternateBarrel;
       const isLeft = this.aaAlternateBarrel;
       soundManager.playM60();
@@ -1194,15 +1224,13 @@ export class GameEngine {
 
       const localMuzzle = isLeft ? this.muzzlePoints.left : this.muzzlePoints.right;
       const worldMuzzle = localMuzzle.clone().applyMatrix4(this.turretPitchGroup.matrixWorld);
-      this.spawnMuzzleFlash(worldMuzzle, 0.45, '#f7f4ec');
+      this.spawnMuzzleFlash(worldMuzzle, 0.45, 'm60');
 
-      this.spawnPlayerProjectile('player_bullet', fireOrigin, dir, w.projectileSpeed, w.damage, w.splashRadius);
+      this.spawnPlayerProjectile('m60', fireOrigin, dir, w.projectileSpeed, w.damage, w.splashRadius);
       this.screenShake = Math.min(0.22, this.screenShake + 0.04);
 
     } else if (this.currentWeapon === 'aa_gun') {
-      // TWO ZU-23 units: one on the left, one on the right. Every shot fires a
-      // single barrel, alternating sides (left unit, right unit, left unit...)
-      // and alternating which of that unit's two barrels fires.
+      // TWO ZU-23 units: brilliant emerald-green 23mm flak tracers
       this.aaAlternateBarrel = !this.aaAlternateBarrel; // side L/R
       const isLeft = this.aaAlternateBarrel;
       this.aaBarrelPhase = !this.aaBarrelPhase;         // barrel 1/2 on that side
@@ -1221,14 +1249,14 @@ export class GameEngine {
         : (this.aaBarrelPhase ? this.muzzlePoints.right : this.muzzlePoints.right2);
       const worldMuzzle = localMuzzle.clone().applyMatrix4(this.turretPitchGroup.matrixWorld);
 
-      this.spawnMuzzleFlash(worldMuzzle, 0.6, '#fbf8f0');
+      this.spawnMuzzleFlash(worldMuzzle, 0.65, 'aa_gun');
 
       // Create high-velocity 23mm tracer projectile
-      this.spawnPlayerProjectile('player_bullet', fireOrigin, dir, w.projectileSpeed, w.damage, w.splashRadius);
+      this.spawnPlayerProjectile('aa_gun', fireOrigin, dir, w.projectileSpeed, w.damage, w.splashRadius);
       this.screenShake = Math.min(0.2, this.screenShake + 0.05);
 
     } else if (this.currentWeapon === 'heavy_cannon') {
-      // TWO 105mm cannons (left + right), each shot fires one side alternately
+      // TWO 105mm cannons: massive fireball, dark cordite smoke, slow arcing heavy shell
       soundManager.playHeavyCannon();
       this.cannonSide = !this.cannonSide;
       if (this.cannonSide) {
@@ -1240,37 +1268,37 @@ export class GameEngine {
 
       const worldMuzzle = (this.cannonSide ? this.muzzlePoints.cannonL : this.muzzlePoints.cannonR)
         .clone().applyMatrix4(this.turretPitchGroup.matrixWorld);
-      this.spawnMuzzleFlash(worldMuzzle, 1.2, '#fffdf6');
+      this.spawnMuzzleFlash(worldMuzzle, 1.4, 'heavy_cannon');
 
-      this.spawnPlayerProjectile('player_cannon', fireOrigin, dir, w.projectileSpeed, w.damage, w.splashRadius);
+      this.spawnPlayerProjectile('heavy_cannon', fireOrigin, dir, w.projectileSpeed, w.damage, w.splashRadius);
       this.screenShake = Math.min(0.65, this.screenShake + 0.35);
 
     } else if (this.currentWeapon === 'missile') {
-      // Guided / Surface-to-Air Missile
+      // Guided / Surface-to-Air Missile: rocket ignition jet & white smoke plume
       soundManager.playMissileLaunch();
       this.lastFiredSide = 0;
       const isLeft = Math.random() < 0.5;
       const localMuzzle = isLeft ? this.muzzlePoints.rocketL : this.muzzlePoints.rocketR;
       const worldMuzzle = localMuzzle.clone().applyMatrix4(this.turretPitchGroup.matrixWorld);
 
-      this.spawnMuzzleFlash(worldMuzzle, 0.8, '#f5ede0');
+      this.spawnMuzzleFlash(worldMuzzle, 0.9, 'missile');
 
       // Find best target near crosshair for homing guidance
       const target = this.findTargetInCrosshair(dir);
-      this.spawnPlayerProjectile('player_missile', fireOrigin, dir, w.projectileSpeed, w.damage, w.splashRadius, target?.id);
+      this.spawnPlayerProjectile('missile', fireOrigin, dir, w.projectileSpeed, w.damage, w.splashRadius, target?.id);
       this.screenShake = Math.min(0.3, this.screenShake + 0.1);
 
     } else if (this.currentWeapon === 'handgun') {
-      // .45 sidearm: accurate single shot, low recoil, weak vs armor
+      // .45 sidearm: heavy subsonic copper bullet, distinct gentle arc, low recoil
       soundManager.playHandgun();
       this.recoilL = 0.25;
       this.lastFiredSide = 0;
 
       const localMuzzle = this.muzzlePoints.center.clone();
       const worldMuzzle = localMuzzle.clone().applyMatrix4(this.turretPitchGroup.matrixWorld);
-      this.spawnMuzzleFlash(worldMuzzle, 0.35, '#faf7f2');
+      this.spawnMuzzleFlash(worldMuzzle, 0.35, 'handgun');
 
-      this.spawnPlayerProjectile('player_bullet', fireOrigin, dir, w.projectileSpeed, w.damage, w.splashRadius);
+      this.spawnPlayerProjectile('handgun', fireOrigin, dir, w.projectileSpeed, w.damage, w.splashRadius);
       this.screenShake = Math.min(0.14, this.screenShake + 0.03);
     }
 
@@ -1311,35 +1339,57 @@ export class GameEngine {
     return bestTarget;
   }
 
-  private getPlayerBulletMesh(): THREE.Mesh {
-    if (!GameEngine.playerBulletGeo) {
-      GameEngine.playerBulletGeo = new THREE.CylinderGeometry(0.05, 0.05, 1.1, 6);
-      GameEngine.playerBulletGeo.rotateX(Math.PI / 2);
-      GameEngine.playerBulletMat = new THREE.MeshBasicMaterial({ color: 0xfffbe8 });
+  private getPlayerM60BulletMesh(): THREE.Mesh {
+    if (!GameEngine.playerM60Geo) {
+      GameEngine.playerM60Geo = new THREE.CylinderGeometry(0.045, 0.045, 1.2, 6);
+      GameEngine.playerM60Geo.rotateX(Math.PI / 2);
+      // Fiery red-orange 7.62mm NATO tracer
+      GameEngine.playerM60Mat = new THREE.MeshBasicMaterial({ color: 0xff4818 });
     }
-    return new THREE.Mesh(GameEngine.playerBulletGeo, GameEngine.playerBulletMat!);
+    return new THREE.Mesh(GameEngine.playerM60Geo, GameEngine.playerM60Mat!);
+  }
+
+  private getPlayerAABulletMesh(): THREE.Mesh {
+    if (!GameEngine.playerAAGeo) {
+      GameEngine.playerAAGeo = new THREE.CylinderGeometry(0.075, 0.075, 1.6, 8);
+      GameEngine.playerAAGeo.rotateX(Math.PI / 2);
+      // Brilliant Soviet 23mm emerald-green phosphor flak tracer
+      GameEngine.playerAAMat = new THREE.MeshBasicMaterial({ color: 0x33ff66 });
+    }
+    return new THREE.Mesh(GameEngine.playerAAGeo, GameEngine.playerAAMat!);
   }
 
   private getPlayerCannonMesh(): THREE.Mesh {
     if (!GameEngine.playerCannonGeo) {
-      GameEngine.playerCannonGeo = new THREE.CylinderGeometry(0.14, 0.14, 1.6, 8);
+      GameEngine.playerCannonGeo = new THREE.CylinderGeometry(0.16, 0.16, 1.9, 10);
       GameEngine.playerCannonGeo.rotateX(Math.PI / 2);
-      GameEngine.playerCannonMat = new THREE.MeshBasicMaterial({ color: 0xfffaec });
+      // Chunky 105mm artillery shell with fiery orange tracer base
+      GameEngine.playerCannonMat = new THREE.MeshBasicMaterial({ color: 0xff7a14 });
     }
     return new THREE.Mesh(GameEngine.playerCannonGeo, GameEngine.playerCannonMat!);
+  }
+
+  private getPlayerHandgunBulletMesh(): THREE.Mesh {
+    if (!GameEngine.playerHandgunGeo) {
+      GameEngine.playerHandgunGeo = new THREE.CylinderGeometry(0.06, 0.065, 0.45, 8);
+      GameEngine.playerHandgunGeo.rotateX(Math.PI / 2);
+      // Heavy subsonic .45 ACP bullet with copper jacket
+      GameEngine.playerHandgunMat = new THREE.MeshBasicMaterial({ color: 0xcd824a });
+    }
+    return new THREE.Mesh(GameEngine.playerHandgunGeo, GameEngine.playerHandgunMat!);
   }
 
   private getPlayerMissileMesh(): THREE.Mesh {
     if (!GameEngine.playerMissileGeo) {
       GameEngine.playerMissileGeo = new THREE.ConeGeometry(0.25, 1.8, 8);
       GameEngine.playerMissileGeo.rotateX(Math.PI / 2);
-      GameEngine.playerMissileMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.8, roughness: 0.3 });
+      GameEngine.playerMissileMat = new THREE.MeshStandardMaterial({ color: 0xd6d6d6, metalness: 0.8, roughness: 0.3 });
     }
     return new THREE.Mesh(GameEngine.playerMissileGeo, GameEngine.playerMissileMat!);
   }
 
   private spawnPlayerProjectile(
-    type: 'player_bullet' | 'player_cannon' | 'player_missile',
+    weapon: WeaponType,
     origin: THREE.Vector3,
     direction: THREE.Vector3,
     speed: number,
@@ -1348,12 +1398,37 @@ export class GameEngine {
     targetId?: number
   ) {
     let mesh: THREE.Mesh;
-    if (type === 'player_bullet') {
-      mesh = this.getPlayerBulletMesh();
-    } else if (type === 'player_cannon') {
+    let projType: 'player_bullet' | 'player_cannon' | 'player_missile';
+    let gravity: number | undefined;
+    let ricochets = 0;
+    let trailColor: string;
+
+    if (weapon === 'm60') {
+      mesh = this.getPlayerM60BulletMesh();
+      projType = 'player_bullet';
+      trailColor = '#ff501e'; // fiery red-orange tracer
+      ricochets = 0;
+    } else if (weapon === 'aa_gun') {
+      mesh = this.getPlayerAABulletMesh();
+      projType = 'player_bullet';
+      trailColor = '#33ff66'; // electric green flak tracer
+      ricochets = 0;
+    } else if (weapon === 'heavy_cannon') {
       mesh = this.getPlayerCannonMesh();
-    } else {
+      projType = 'player_cannon';
+      gravity = 14.0; // heavy ballistic drop!
+      trailColor = '#ff8811'; // fiery orange flame & cordite smoke
+    } else if (weapon === 'missile') {
       mesh = this.getPlayerMissileMesh();
+      projType = 'player_missile';
+      trailColor = '#ffffff';
+    } else {
+      // handgun
+      mesh = this.getPlayerHandgunBulletMesh();
+      projType = 'player_bullet';
+      gravity = 9.8; // subsonic pistol round has gentle ballistic arc
+      trailColor = '#dca46e'; // warm copper streak
+      ricochets = 0;
     }
 
     mesh.position.copy(origin);
@@ -1362,56 +1437,174 @@ export class GameEngine {
 
     this.projectiles.push({
       id: this.nextEntityId++,
-      type,
+      type: projType,
+      weaponSource: weapon,
+      gravity,
+      ricochets,
+      trailColor,
       mesh,
       position: { x: origin.x, y: origin.y, z: origin.z },
       velocity: { x: direction.x * speed, y: direction.y * speed, z: direction.z * speed },
       damage,
       splashRadius,
       lifetime: 0,
-      maxLifetime: 3.5,
+      maxLifetime: weapon === 'heavy_cannon' ? 5.0 : 3.5,
       targetId,
     });
   }
 
-  private spawnMuzzleFlash(pos: THREE.Vector3, scale: number, color: string = '#fcf8f0') {
-    // 1. Crisp incandescent white-hot core
-    this.particles.push({
-      x: pos.x, y: pos.y, z: pos.z, vx: 0, vy: (Math.random() - 0.5) * 0.4, vz: 0,
-      color: '#ffffff', size: scale * 1.0, life: 0, maxLife: 0.04,
-    });
-    // 2. Light propellant gas expansion (compact pale-white/ivory, not saturated yellow)
-    this.particles.push({
-      x: pos.x, y: pos.y, z: pos.z, vx: (Math.random() - 0.5) * 0.6, vy: (Math.random() - 0.5) * 0.6, vz: (Math.random() - 0.5) * 0.6,
-      color: color || '#faf6ee', size: scale * 1.5, life: 0, maxLife: 0.05,
-    });
-    // 3. Very subtle momentary sparks (light cream/white)
-    if (Math.random() < 0.65) {
+  private spawnMuzzleFlash(pos: THREE.Vector3, scale: number, weaponType: WeaponType = 'm60') {
+    if (weaponType === 'm60') {
+      // M60: White-hot core + warm amber gas envelope + subtle rifle sparks + light grey gunsmoke
       this.particles.push({
-        x: pos.x + (Math.random() - 0.5) * 0.15 * scale,
-        y: pos.y + (Math.random() - 0.5) * 0.15 * scale,
-        z: pos.z + (Math.random() - 0.5) * 0.15 * scale,
-        vx: (Math.random() - 0.5) * 3.5,
-        vy: (Math.random() - 0.5) * 3.5,
-        vz: (Math.random() - 0.5) * 3.5,
-        color: '#f8f4ec',
-        size: scale * 0.35,
-        life: 0,
-        maxLife: 0.055,
+        x: pos.x, y: pos.y, z: pos.z, vx: 0, vy: (Math.random() - 0.5) * 0.4, vz: 0,
+        color: '#ffffff', size: scale * 0.9, life: 0, maxLife: 0.04,
+      });
+      this.particles.push({
+        x: pos.x, y: pos.y, z: pos.z, vx: (Math.random() - 0.5) * 0.8, vy: (Math.random() - 0.5) * 0.8, vz: (Math.random() - 0.5) * 0.8,
+        color: '#fff3d2', size: scale * 1.4, life: 0, maxLife: 0.05,
+      });
+      if (Math.random() < 0.5) {
+        this.particles.push({
+          x: pos.x, y: pos.y, z: pos.z,
+          vx: (Math.random() - 0.5) * 3.0, vy: (Math.random() - 0.5) * 3.0, vz: (Math.random() - 0.5) * 3.0,
+          color: '#ffe6a8', size: scale * 0.35, life: 0, maxLife: 0.06,
+        });
+      }
+      this.particles.push({
+        x: pos.x, y: pos.y + 0.05, z: pos.z,
+        vx: (Math.random() - 0.5) * 0.8, vy: 0.9 + Math.random() * 0.8, vz: (Math.random() - 0.5) * 0.8,
+        color: '#ccc7bd', size: scale * 1.2, life: 0, maxLife: 0.3, smoke: true,
+      });
+
+    } else if (weaponType === 'aa_gun') {
+      // AA Gun 23mm: Violent high-pressure burst with Soviet green phosphor fringe + expanding white cordite smoke
+      this.particles.push({
+        x: pos.x, y: pos.y, z: pos.z, vx: 0, vy: (Math.random() - 0.5) * 0.4, vz: 0,
+        color: '#ffffff', size: scale * 1.1, life: 0, maxLife: 0.04,
+      });
+      this.particles.push({
+        x: pos.x, y: pos.y, z: pos.z, vx: (Math.random() - 0.5) * 1.0, vy: (Math.random() - 0.5) * 1.0, vz: (Math.random() - 0.5) * 1.0,
+        color: '#e4ffe8', size: scale * 1.6, life: 0, maxLife: 0.05,
+      });
+      for (let s = 0; s < 2; s++) {
+        this.particles.push({
+          x: pos.x + (Math.random() - 0.5) * 0.1, y: pos.y + 0.05, z: pos.z + (Math.random() - 0.5) * 0.1,
+          vx: (Math.random() - 0.5) * 1.2, vy: 1.1 + Math.random() * 0.8, vz: (Math.random() - 0.5) * 1.2,
+          color: '#e2ded5', size: scale * 1.5, life: 0, maxLife: 0.45, smoke: true,
+        });
+      }
+
+    } else if (weaponType === 'heavy_cannon') {
+      // 105mm Heavy Cannon: Massive fiery fireball + sparks shower + thick dark billowing cordite cloud
+      this.particles.push({
+        x: pos.x, y: pos.y, z: pos.z, vx: 0, vy: 0, vz: 0,
+        color: '#ffffff', size: scale * 1.6, life: 0, maxLife: 0.07,
+      });
+      this.particles.push({
+        x: pos.x, y: pos.y, z: pos.z, vx: (Math.random() - 0.5) * 1.8, vy: 0.5 + (Math.random() - 0.5) * 1.8, vz: (Math.random() - 0.5) * 1.8,
+        color: '#ff7711', size: scale * 2.8, life: 0, maxLife: 0.11,
+      });
+      this.particles.push({
+        x: pos.x, y: pos.y, z: pos.z, vx: (Math.random() - 0.5) * 1.4, vy: 0.4 + (Math.random() - 0.5) * 1.4, vz: (Math.random() - 0.5) * 1.4,
+        color: '#ffa328', size: scale * 2.2, life: 0, maxLife: 0.09,
+      });
+      // Fiery propellant sparks
+      for (let sp = 0; sp < 8; sp++) {
+        this.particles.push({
+          x: pos.x + (Math.random() - 0.5) * 0.2, y: pos.y + (Math.random() - 0.5) * 0.2, z: pos.z + (Math.random() - 0.5) * 0.2,
+          vx: (Math.random() - 0.5) * 6.0, vy: 2.0 + Math.random() * 4.0, vz: (Math.random() - 0.5) * 6.0,
+          color: Math.random() < 0.5 ? '#ffcc44' : '#ff6a00', size: scale * 0.45, life: 0, maxLife: 0.14,
+        });
+      }
+      // Thick heavy billowing dark cordite smoke
+      for (let sm = 0; sm < 4; sm++) {
+        this.particles.push({
+          x: pos.x + (Math.random() - 0.5) * 0.3, y: pos.y + 0.1 + Math.random() * 0.2, z: pos.z + (Math.random() - 0.5) * 0.3,
+          vx: (Math.random() - 0.5) * 1.8, vy: 1.4 + Math.random() * 1.6, vz: (Math.random() - 0.5) * 1.8,
+          color: Math.random() < 0.5 ? '#5e564e' : '#7b7268', size: scale * 2.4, life: 0, maxLife: 1.1 + Math.random() * 0.4, smoke: true,
+        });
+      }
+
+    } else if (weaponType === 'missile') {
+      // Missile / Rocket: Intense rocket motor ignition jet flame + dense white smoke plume
+      this.particles.push({
+        x: pos.x, y: pos.y, z: pos.z, vx: 0, vy: 0, vz: 0,
+        color: '#ffffff', size: scale * 1.2, life: 0, maxLife: 0.06,
+      });
+      this.particles.push({
+        x: pos.x, y: pos.y, z: pos.z, vx: (Math.random() - 0.5) * 1.2, vy: (Math.random() - 0.5) * 1.2, vz: (Math.random() - 0.5) * 1.2,
+        color: '#ff8a14', size: scale * 1.8, life: 0, maxLife: 0.09,
+      });
+      for (let ms = 0; ms < 3; ms++) {
+        this.particles.push({
+          x: pos.x + (Math.random() - 0.5) * 0.2, y: pos.y + 0.1, z: pos.z + (Math.random() - 0.5) * 0.2,
+          vx: (Math.random() - 0.5) * 1.5, vy: 1.0 + Math.random() * 1.0, vz: (Math.random() - 0.5) * 1.5,
+          color: '#f4f4f4', size: scale * 1.8, life: 0, maxLife: 0.75, smoke: true,
+        });
+      }
+
+    } else {
+      // Handgun: Snappy compact pop + delicate faint white whisper puff
+      this.particles.push({
+        x: pos.x, y: pos.y, z: pos.z, vx: 0, vy: 0, vz: 0,
+        color: '#ffffff', size: scale * 0.7, life: 0, maxLife: 0.035,
+      });
+      this.particles.push({
+        x: pos.x, y: pos.y, z: pos.z, vx: (Math.random() - 0.5) * 0.4, vy: (Math.random() - 0.5) * 0.4, vz: (Math.random() - 0.5) * 0.4,
+        color: '#fff8eb', size: scale * 1.0, life: 0, maxLife: 0.045,
+      });
+      this.particles.push({
+        x: pos.x, y: pos.y + 0.03, z: pos.z,
+        vx: (Math.random() - 0.5) * 0.5, vy: 0.6 + Math.random() * 0.5, vz: (Math.random() - 0.5) * 0.5,
+        color: '#ded9cf', size: scale * 0.8, life: 0, maxLife: 0.22, smoke: true,
       });
     }
-    // 4. Subtle, thin muzzle smoke puff
+  }
+
+  private spawnGroundImpactDirt(x: number, y: number, z: number) {
+    for (let i = 0; i < 5; i++) {
+      this.particles.push({
+        x: x + (Math.random() - 0.5) * 0.2,
+        y: y + 0.05,
+        z: z + (Math.random() - 0.5) * 0.2,
+        vx: (Math.random() - 0.5) * 2.5,
+        vy: 1.2 + Math.random() * 2.0,
+        vz: (Math.random() - 0.5) * 2.5,
+        color: Math.random() < 0.5 ? '#9c866d' : '#bfa98e',
+        size: 0.5 + Math.random() * 0.4,
+        life: 0,
+        maxLife: 0.35 + Math.random() * 0.2,
+        smoke: true,
+      });
+    }
+  }
+
+  private spawnRicochetFX(x: number, y: number, z: number, deflectDir: THREE.Vector3, tracerColor: string) {
+    this.spawnGroundImpactDirt(x, y, z);
+    for (let i = 0; i < 7; i++) {
+      this.particles.push({
+        x: x + (Math.random() - 0.5) * 0.1,
+        y: y + 0.05,
+        z: z + (Math.random() - 0.5) * 0.1,
+        vx: deflectDir.x * 12 + (Math.random() - 0.5) * 8,
+        vy: Math.abs(deflectDir.y) * 14 + 4 + Math.random() * 8,
+        vz: deflectDir.z * 12 + (Math.random() - 0.5) * 8,
+        color: Math.random() < 0.6 ? '#fff4b8' : tracerColor,
+        size: 0.25 + Math.random() * 0.2,
+        life: 0,
+        maxLife: 0.18 + Math.random() * 0.12,
+      });
+    }
     this.particles.push({
-      x: pos.x + (Math.random() - 0.5) * 0.1,
-      y: pos.y + 0.05,
-      z: pos.z + (Math.random() - 0.5) * 0.1,
-      vx: (Math.random() - 0.5) * 0.8,
-      vy: 0.8 + Math.random() * 0.8,
-      vz: (Math.random() - 0.5) * 0.8,
-      color: '#dedad2',
-      size: scale * 1.3,
+      x, y: y + 0.1, z,
+      vx: (Math.random() - 0.5) * 0.5,
+      vy: 0.8 + Math.random() * 0.6,
+      vz: (Math.random() - 0.5) * 0.5,
+      color: '#d4cebe',
+      size: 0.7,
       life: 0,
-      maxLife: 0.25,
+      maxLife: 0.3,
       smoke: true,
     });
   }
@@ -2690,14 +2883,14 @@ export class GameEngine {
     );
     const dir = target.sub(origin).normalize();
 
-    // Realistic pale-white muzzle flash from tank cannon
-    this.spawnMuzzleFlash(origin, 1.2, '#fbf8f0');
+    // Realistic heavy cannon muzzle flash from tank cannon
+    this.spawnMuzzleFlash(origin, 1.2, 'heavy_cannon');
 
     this.spawnEnemyProjectile('enemy_shell', origin, dir, 70, Math.max(5, Math.round(18 * diff.damageMult * this.waveScale(this.stats.wave).damageMult)));
   }
 
   private enemyShootAPCCannon(e: EnemyEntity) {
-    soundManager.playEnemyRifle();
+    soundManager.playDistantAutocannon();
     const diff = DIFFICULTY_SETTINGS[this.difficulty];
     const spread = diff.accuracySpread * 1.1;
     const origin = new THREE.Vector3(e.position.x, e.position.y + 1.8, e.position.z);
@@ -2709,7 +2902,7 @@ export class GameEngine {
     const dir = target.sub(origin).normalize();
 
     // Autocannon muzzle flash
-    this.spawnMuzzleFlash(origin, 0.6, '#f7f4ec');
+    this.spawnMuzzleFlash(origin, 0.6, 'aa_gun');
 
     this.spawnEnemyProjectile('enemy_bullet', origin, dir, 90, Math.max(2, Math.round(6 * diff.damageMult * this.waveScale(this.stats.wave).damageMult)));
   }
@@ -2829,6 +3022,18 @@ export class GameEngine {
       if (p.dead) continue;
       p.lifetime += dt;
 
+      // Ballistic gravity (e.g. heavy 105mm artillery shell or subsonic handgun round)
+      if (p.gravity) {
+        p.velocity.y -= p.gravity * dt;
+        const spd = Math.hypot(p.velocity.x, p.velocity.y, p.velocity.z);
+        if (spd > 0.001) {
+          p.mesh.quaternion.setFromUnitVectors(
+            new THREE.Vector3(0, 0, -1),
+            new THREE.Vector3(p.velocity.x / spd, p.velocity.y / spd, p.velocity.z / spd)
+          );
+        }
+      }
+
       // Homing logic (missiles + kamikaze drone steer to target)
       if ((p.type === 'player_missile' || p.type === 'player_drone') && p.targetId) {
         const target = this.enemies.find((e) => e.id === p.targetId && !e.dead);
@@ -2842,7 +3047,8 @@ export class GameEngine {
         }
       }
 
-      // Smoke trail (missiles + drone)
+      // In-flight weapon trails & smoke
+      p.trailTimer = (p.trailTimer || 0) + dt;
       if (p.type === 'player_missile' || p.type === 'enemy_rocket' || p.type === 'player_drone') {
         this.particles.push({
           x: p.position.x,
@@ -2864,12 +3070,58 @@ export class GameEngine {
             vx: 0, vy: 0, vz: 0, color: '#ff9a2e', size: 1.6, life: 0, maxLife: 0.18,
           });
         }
+      } else if (p.weaponSource === 'heavy_cannon') {
+        if (p.trailTimer >= 0.04) {
+          p.trailTimer = 0;
+          // Billowing dark cordite smoke puff behind 105mm shell
+          this.particles.push({
+            x: p.position.x, y: p.position.y, z: p.position.z,
+            vx: (Math.random() - 0.5) * 0.8, vy: 0.4 + Math.random() * 0.4, vz: (Math.random() - 0.5) * 0.8,
+            color: Math.random() < 0.5 ? '#5a544d' : '#736b62',
+            size: 1.1 + Math.random() * 0.4,
+            life: 0,
+            maxLife: 0.65,
+            smoke: true,
+          });
+          // Fiery propellant base spark
+          this.particles.push({
+            x: p.position.x, y: p.position.y, z: p.position.z,
+            vx: 0, vy: 0, vz: 0,
+            color: '#ff8811',
+            size: 0.55,
+            life: 0,
+            maxLife: 0.1,
+          });
+        }
+      } else if (p.weaponSource === 'aa_gun') {
+        if (p.trailTimer >= 0.035) {
+          p.trailTimer = 0;
+          // Distinct emerald green flak phosphor streak
+          this.particles.push({
+            x: p.position.x, y: p.position.y, z: p.position.z,
+            vx: 0, vy: 0, vz: 0,
+            color: '#33ff66',
+            size: 0.35,
+            life: 0,
+            maxLife: 0.075,
+          });
+        }
+      } else if (p.weaponSource === 'm60') {
+        if (p.trailTimer >= 0.035) {
+          p.trailTimer = 0;
+          // Fiery red-orange NATO tracer particle
+          this.particles.push({
+            x: p.position.x, y: p.position.y, z: p.position.z,
+            vx: 0, vy: 0, vz: 0,
+            color: '#ff501e',
+            size: 0.28,
+            life: 0,
+            maxLife: 0.065,
+          });
+        }
       }
 
-      // Sub-stepped movement: fast player rounds (220 m/s) move ~3.7m per frame,
-      // more than a soldier's ~2.3m effective hit radius, so a single per-frame
-      // distance check lets rounds tunnel straight through targets. Splitting the
-      // frame into small steps (~0.9m each) makes every target checkable.
+      // Sub-stepped movement to prevent tunneling
       const moveDist = Math.hypot(p.velocity.x, p.velocity.y, p.velocity.z) * dt;
       const subSteps = p.type.startsWith('player_') ? THREE.MathUtils.clamp(Math.ceil(moveDist / 0.9), 1, 12) : 1;
       const sdt = dt / subSteps;
@@ -2892,7 +3144,6 @@ export class GameEngine {
               hit = true;
               this.stats.shotsHit++;
               if (p.type === 'player_drone') {
-                // Drone detonates: kill the target + splash everything nearby
                 this.detonateDrone(p);
                 break;
               }
@@ -2937,19 +3188,68 @@ export class GameEngine {
             }
           }
 
-          // Terrain impact
+          // Terrain impact & Ricochet physics
           if (!hit) {
             const ground = this.getHeightAt(p.position.x, p.position.z);
             if (p.position.y <= ground) {
-              hit = true;
               if (p.type === 'player_drone') {
                 this.detonateDrone(p);
+                hit = true;
               } else if (p.type === 'player_cannon' && p.splashRadius >= 8) {
-                // Heavy cannon shells & airstrike bombs detonate on the ground
-                // with real area damage (this is what made air support "miss").
+                // Heavy cannon shells & airstrike bombs detonate on the ground with massive concussion
                 this.detonateAoe(p);
+                hit = true;
+              } else if (p.type === 'player_missile') {
+                this.createExplosion(p.position.x, ground + 0.5, p.position.z, 'medium');
+                hit = true;
               } else {
-                this.createExplosion(p.position.x, ground + 0.2, p.position.z, 'small');
+                // Kinetic projectiles (M60, AA Gun 23mm, Handgun .45) can ricochet off the terrain!
+                const ricochets = p.ricochets || 0;
+                const hL = this.getHeightAt(p.position.x - 0.4, p.position.z);
+                const hR = this.getHeightAt(p.position.x + 0.4, p.position.z);
+                const hD = this.getHeightAt(p.position.x, p.position.z - 0.4);
+                const hU = this.getHeightAt(p.position.x, p.position.z + 0.4);
+                const normal = new THREE.Vector3(-(hR - hL), 0.8, -(hU - hD)).normalize();
+
+                const speed = Math.hypot(p.velocity.x, p.velocity.y, p.velocity.z);
+                const vNorm = new THREE.Vector3(p.velocity.x / speed, p.velocity.y / speed, p.velocity.z / speed);
+                const vDotN = vNorm.dot(normal); // negative entering ground
+
+                // Glancing or shallow angle has high ricochet chance; allows up to 2 bounces
+                const canRicochet = ricochets < 2 && (vDotN > -0.72 || Math.random() < 0.4);
+
+                if (canRicochet) {
+                  p.ricochets = ricochets + 1;
+                  soundManager.playRicochet();
+
+                  // Reflect velocity with energy loss and upward deflection
+                  const bounceSpeed = speed * (0.5 + Math.random() * 0.22);
+                  const refl = vNorm.clone().sub(normal.clone().multiplyScalar(2 * vDotN));
+                  refl.x += (Math.random() - 0.5) * 0.35;
+                  refl.y = Math.max(0.18, refl.y * 0.75 + 0.18 + Math.random() * 0.25);
+                  refl.z += (Math.random() - 0.5) * 0.35;
+                  refl.normalize();
+
+                  p.velocity.x = refl.x * bounceSpeed;
+                  p.velocity.y = refl.y * bounceSpeed;
+                  p.velocity.z = refl.z * bounceSpeed;
+
+                  // Clear the ground surface
+                  p.position.y = ground + 0.25;
+                  p.mesh.position.set(p.position.x, p.position.y, p.position.z);
+                  p.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), refl);
+
+                  p.damage *= 0.65;
+                  p.maxLifetime = Math.min(p.maxLifetime, p.lifetime + 1.1);
+
+                  this.spawnRicochetFX(p.position.x, ground + 0.1, p.position.z, refl, p.trailColor || '#ffaa33');
+                  hit = false;
+                  break;
+                } else {
+                  hit = true;
+                  this.createExplosion(p.position.x, ground + 0.2, p.position.z, 'small');
+                  this.spawnGroundImpactDirt(p.position.x, ground + 0.05, p.position.z);
+                }
               }
             }
           }
@@ -2960,6 +3260,33 @@ export class GameEngine {
           if (distToBunker < 4.5) {
             hit = true;
             this.damagePlayerBase(p.damage);
+          } else {
+            // Enemy projectile ground impact
+            const ground = this.getHeightAt(p.position.x, p.position.z);
+            if (p.position.y <= ground) {
+              if (p.type === 'enemy_shell' || p.type === 'enemy_rocket') {
+                hit = true;
+                this.createExplosion(p.position.x, ground + 0.3, p.position.z, 'small');
+              } else {
+                // Enemy rifle bullet ricochet off terrain
+                const ricochets = p.ricochets || 0;
+                if (ricochets < 1 && Math.random() < 0.4) {
+                  p.ricochets = ricochets + 1;
+                  soundManager.playRicochet();
+                  p.velocity.y = Math.abs(p.velocity.y) * 0.45 + 8;
+                  p.velocity.x += (Math.random() - 0.5) * 12;
+                  p.velocity.z += (Math.random() - 0.5) * 12;
+                  p.position.y = ground + 0.22;
+                  p.maxLifetime = Math.min(p.maxLifetime, p.lifetime + 0.8);
+                  this.spawnRicochetFX(p.position.x, ground + 0.1, p.position.z, new THREE.Vector3(0, 1, 0), '#ffe066');
+                  hit = false;
+                  break;
+                } else {
+                  hit = true;
+                  this.spawnGroundImpactDirt(p.position.x, ground + 0.05, p.position.z);
+                }
+              }
+            }
           }
         }
       }
@@ -3749,6 +4076,11 @@ export class GameEngine {
 
   public cleanup() {
     if (this.animFrameId) cancelAnimationFrame(this.animFrameId);
+    if (document.pointerLockElement === this.renderer.domElement) {
+      try {
+        document.exitPointerLock?.();
+      } catch { /* ignored */ }
+    }
     this.activeFlares.forEach((f) => this.scene.remove(f.meshGroup));
     this.activeFlares = [];
     this.renderer.dispose();

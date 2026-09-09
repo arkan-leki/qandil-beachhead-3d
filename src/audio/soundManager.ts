@@ -51,47 +51,145 @@ class SoundManager {
     return buffer;
   }
 
-  // Dual 30mm Anti-Air Autocannon Shot
+  private aaDistortionCurve: Float32Array | null = null;
+  private getAADistortionCurve(): Float32Array {
+    if (this.aaDistortionCurve) return this.aaDistortionCurve;
+    const n = 1024;
+    const curve = new Float32Array(n);
+    const k = 42; // Aggressive saturation for tearing propellant gas roar
+    const deg = Math.PI / 180;
+    for (let i = 0; i < n; i++) {
+      const x = (i * 2) / n - 1;
+      curve[i] = ((3 + k) * x * 20 * deg) / (Math.PI + k * Math.abs(x));
+    }
+    this.aaDistortionCurve = curve;
+    return curve;
+  }
+
+  // Authentic Soviet ZSU-23-4 / ZU-23 "Shilka" Autocannon Fire ("pszzhh-ssh-zhhh")
   public playAAGun(leftBarrel: boolean = false) {
     if (this.isMuted || !this.ctx) return;
     const t = this.ctx.currentTime;
-    
-    // Snappy noise transient
-    const noise = this.ctx.createBufferSource();
-    const buf = this.createNoiseBuffer(0.1);
-    if (!buf) return;
-    noise.buffer = buf;
-    
-    const filter = this.ctx.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.frequency.setValueAtTime(leftBarrel ? 2400 : 2100, t);
-    filter.frequency.exponentialRampToValueAtTime(400, t + 0.08);
+    const jitter = 0.96 + Math.random() * 0.08;
 
-    const gain = this.ctx.createGain();
-    gain.gain.setValueAtTime(0.4, t);
-    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.09);
+    // Optional stereo panning for twin left/right mounts
+    let panner: StereoPannerNode | null = null;
+    if (this.ctx.createStereoPanner) {
+      try {
+        panner = this.ctx.createStereoPanner();
+        panner.pan.setValueAtTime(leftBarrel ? -0.32 : 0.32, t);
+        panner.connect(this.ctx.destination);
+      } catch {
+        panner = null;
+      }
+    }
+    const output: AudioNode = panner || this.ctx.destination;
 
-    // Punch oscillator
-    const osc = this.ctx.createOscillator();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(160, t);
-    osc.frequency.exponentialRampToValueAtTime(40, t + 0.07);
+    // 1. "PST!" Supersonic shockwave crack & mechanical chamber clack
+    const snapBuf = this.createNoiseBuffer(0.025);
+    if (snapBuf) {
+      const snapNoise = this.ctx.createBufferSource();
+      snapNoise.buffer = snapBuf;
+      const snapHp = this.ctx.createBiquadFilter();
+      snapHp.type = 'highpass';
+      snapHp.frequency.setValueAtTime((leftBarrel ? 4200 : 3800) * jitter, t);
 
-    const oscGain = this.ctx.createGain();
-    oscGain.gain.setValueAtTime(0.35, t);
-    oscGain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+      const snapGain = this.ctx.createGain();
+      snapGain.gain.setValueAtTime(0.55, t);
+      snapGain.gain.exponentialRampToValueAtTime(0.001, t + 0.024);
 
-    noise.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.ctx.destination);
+      snapNoise.connect(snapHp);
+      snapHp.connect(snapGain);
+      snapGain.connect(output);
 
-    osc.connect(oscGain);
-    oscGain.connect(this.ctx.destination);
+      snapNoise.start(t);
+      snapNoise.stop(t + 0.028);
+    }
 
-    noise.start(t);
-    noise.stop(t + 0.1);
-    osc.start(t);
-    osc.stop(t + 0.09);
+    // 2. The Signature Searing Gas Jet & Tearing Shred ("pszzhh-ssh-zhhh")
+    // High-gain noise through waveshaper distortion + resonant dual bandpass sweeps
+    const tearDur = 0.17;
+    const tearBuf = this.createNoiseBuffer(tearDur);
+    if (tearBuf) {
+      const tearNoise = this.ctx.createBufferSource();
+      tearNoise.buffer = tearBuf;
+
+      const shaper = this.ctx.createWaveShaper();
+      shaper.curve = this.getAADistortionCurve();
+      shaper.oversample = '2x';
+
+      const bp1 = this.ctx.createBiquadFilter();
+      bp1.type = 'bandpass';
+      bp1.Q.setValueAtTime(3.8, t);
+      // Sweeping resonant tear starting in high presence and tearing down
+      const startFreq = (leftBarrel ? 3600 : 3250) * jitter;
+      const midFreq = (leftBarrel ? 2400 : 2100) * jitter;
+      const endFreq = 950 * jitter;
+      bp1.frequency.setValueAtTime(startFreq, t);
+      bp1.frequency.exponentialRampToValueAtTime(midFreq, t + 0.04);
+      bp1.frequency.exponentialRampToValueAtTime(endFreq, t + tearDur);
+
+      // Peaking filter to emphasize the cutting metallic throat hiss of the ZSU muzzle brake
+      const peak = this.ctx.createBiquadFilter();
+      peak.type = 'peaking';
+      peak.frequency.setValueAtTime(2800 * jitter, t);
+      peak.Q.setValueAtTime(2.2, t);
+      peak.gain.setValueAtTime(9.0, t); // +9dB resonance
+
+      const tearGain = this.ctx.createGain();
+      tearGain.gain.setValueAtTime(0.72, t);
+      tearGain.gain.setValueAtTime(0.65, t + 0.035); // sustain the tearing jet
+      tearGain.gain.exponentialRampToValueAtTime(0.001, t + tearDur);
+
+      tearNoise.connect(shaper);
+      shaper.connect(bp1);
+      bp1.connect(peak);
+      peak.connect(tearGain);
+      tearGain.connect(output);
+
+      tearNoise.start(t);
+      tearNoise.stop(t + tearDur + 0.01);
+    }
+
+    // 3. Mechanical "Sewing Machine / Buzz-Saw" Resonance ("-zhhh")
+    // Fast periodic sawtooth pulse at the ZSU cyclic rate (~165-175Hz)
+    const mechOsc = this.ctx.createOscillator();
+    mechOsc.type = 'sawtooth';
+    const mechBaseFreq = (leftBarrel ? 172 : 162) * jitter;
+    mechOsc.frequency.setValueAtTime(mechBaseFreq, t);
+    mechOsc.frequency.linearRampToValueAtTime(mechBaseFreq * 0.82, t + 0.11);
+
+    const mechFilter = this.ctx.createBiquadFilter();
+    mechFilter.type = 'bandpass';
+    mechFilter.frequency.setValueAtTime(1250 * jitter, t);
+    mechFilter.Q.setValueAtTime(3.0, t);
+
+    const mechGain = this.ctx.createGain();
+    mechGain.gain.setValueAtTime(0.38, t);
+    mechGain.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
+
+    mechOsc.connect(mechFilter);
+    mechFilter.connect(mechGain);
+    mechGain.connect(output);
+
+    mechOsc.start(t);
+    mechOsc.stop(t + 0.12);
+
+    // 4. Heavy 23mm Concussive Chamber Punch (Chest-thump)
+    const thumpOsc = this.ctx.createOscillator();
+    thumpOsc.type = 'triangle';
+    thumpOsc.frequency.setValueAtTime(185 * jitter, t);
+    thumpOsc.frequency.exponentialRampToValueAtTime(42, t + 0.09);
+
+    const thumpGain = this.ctx.createGain();
+    thumpGain.gain.setValueAtTime(0.55, t);
+    thumpGain.gain.exponentialRampToValueAtTime(0.001, t + 0.095);
+
+    thumpOsc.connect(thumpGain);
+    thumpGain.connect(output);
+
+    thumpOsc.start(t);
+    thumpOsc.stop(t + 0.10);
   }
 
   // 105mm Heavy Bunker Cannon (Massive punch)
@@ -576,6 +674,47 @@ class SoundManager {
     noise.stop(t + 0.07);
   }
 
+  // Distant enemy APC / IFV autocannon shot (23mm/30mm)
+  public playDistantAutocannon() {
+    if (this.isMuted || !this.ctx) return;
+    const t = this.ctx.currentTime;
+
+    const noise = this.ctx.createBufferSource();
+    const buf = this.createNoiseBuffer(0.12);
+    if (!buf) return;
+    noise.buffer = buf;
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(1400, t);
+    filter.frequency.exponentialRampToValueAtTime(500, t + 0.1);
+    filter.Q.setValueAtTime(2.5, t);
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.28, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
+
+    const osc = this.ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(130, t);
+    osc.frequency.exponentialRampToValueAtTime(45, t + 0.08);
+
+    const oscGain = this.ctx.createGain();
+    oscGain.gain.setValueAtTime(0.25, t);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.connect(oscGain);
+    oscGain.connect(this.ctx.destination);
+
+    noise.start(t);
+    noise.stop(t + 0.12);
+    osc.start(t);
+    osc.stop(t + 0.08);
+  }
+
   // .45 handgun: sharp, short report with a low punch
   public playHandgun() {
     if (this.isMuted || !this.ctx) return;
@@ -656,6 +795,55 @@ class SoundManager {
     noise.stop(t + 0.1);
     osc.start(t);
     osc.stop(t + 0.09);
+  }
+
+  // Realistic bullet ricochet whine / ping off ground and hard surfaces
+  private lastRicochetTime: number = 0;
+  public playRicochet() {
+    if (this.isMuted || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    if (t - this.lastRicochetTime < 0.045) return; // rate limit rapid simultaneous impacts
+    this.lastRicochetTime = t;
+
+    // 1. Initial supersonic strike snap
+    const snap = this.ctx.createBufferSource();
+    const snapBuf = this.createNoiseBuffer(0.025);
+    if (snapBuf) {
+      snap.buffer = snapBuf;
+      const hp = this.ctx.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.setValueAtTime(2400, t);
+      const snapGain = this.ctx.createGain();
+      snapGain.gain.setValueAtTime(0.28, t);
+      snapGain.gain.exponentialRampToValueAtTime(0.001, t + 0.025);
+      snap.connect(hp);
+      hp.connect(snapGain);
+      snapGain.connect(this.ctx.destination);
+      snap.start(t);
+      snap.stop(t + 0.03);
+    }
+
+    // 2. High-speed spinning ricochet ping / whine chirp
+    const startFreq = 2600 + Math.random() * 1200; // 2600 - 3800 Hz
+    const endFreq = 650 + Math.random() * 500;     // 650 - 1150 Hz
+    const dur = 0.16 + Math.random() * 0.08;
+
+    const osc = this.ctx.createOscillator();
+    osc.type = Math.random() < 0.5 ? 'sine' : 'triangle';
+    osc.frequency.setValueAtTime(startFreq, t);
+    // Exponential pitch dive of spinning deformed bullet
+    osc.frequency.exponentialRampToValueAtTime(Math.max(100, endFreq), t + dur);
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.22, t);
+    gain.gain.linearRampToValueAtTime(0.24, t + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+
+    osc.start(t);
+    osc.stop(t + dur);
   }
 }
 

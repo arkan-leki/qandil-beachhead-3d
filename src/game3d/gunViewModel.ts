@@ -21,35 +21,53 @@ interface UnitRefs {
   pod: THREE.Group;
 }
 
-// Builds a realistic, compact, pale white-hot muzzle flash (no starburst cross planes, no saturated yellow)
-function createRealisticMuzzleFlash(scaleMultiplier: number = 1.0): { group: THREE.Group; mats: THREE.MeshBasicMaterial[] } {
+// Builds a realistic, compact muzzle flash with weapon-specific color customization
+function createRealisticMuzzleFlash(
+  scaleMultiplier: number = 1.0,
+  colors: { core: number; plume: number; gas: number } = { core: 0xffffff, plume: 0xfffef5, gas: 0xf5f0e6 }
+): {
+  group: THREE.Group;
+  mats: THREE.MeshBasicMaterial[];
+  setColors: (core: number, plume: number, gas: number) => void;
+  setScale: (scale: number) => void;
+} {
   const group = new THREE.Group();
   const mats: THREE.MeshBasicMaterial[] = [];
 
   // 1. Incandescent white-hot ignition core (tight at muzzle brake)
-  const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 });
+  const coreMat = new THREE.MeshBasicMaterial({ color: colors.core, transparent: true, opacity: 0 });
   const core = new THREE.Mesh(new THREE.SphereGeometry(0.045 * scaleMultiplier, 8, 8), coreMat);
   core.position.set(0, 0, -0.04 * scaleMultiplier);
   group.add(core);
   mats.push(coreMat);
 
-  // 2. High-speed pale white-hot propellant plume (compact conical jet exiting muzzle)
-  const plumeMat = new THREE.MeshBasicMaterial({ color: 0xfffef5, transparent: true, opacity: 0 });
+  // 2. High-speed propellant plume (compact conical jet exiting muzzle)
+  const plumeMat = new THREE.MeshBasicMaterial({ color: colors.plume, transparent: true, opacity: 0 });
   const plume = new THREE.Mesh(new THREE.ConeGeometry(0.065 * scaleMultiplier, 0.16 * scaleMultiplier, 8), plumeMat);
   plume.rotation.x = -Math.PI / 2;
   plume.position.set(0, 0, -0.09 * scaleMultiplier);
   group.add(plume);
   mats.push(plumeMat);
 
-  // 3. Faint translucent outer gas envelope (soft light ivory, not saturated yellow)
-  const gasMat = new THREE.MeshBasicMaterial({ color: 0xf5f0e6, transparent: true, opacity: 0 });
+  // 3. Translucent outer gas envelope
+  const gasMat = new THREE.MeshBasicMaterial({ color: colors.gas, transparent: true, opacity: 0 });
   const gas = new THREE.Mesh(new THREE.SphereGeometry(0.075 * scaleMultiplier, 8, 8), gasMat);
   gas.scale.set(1.0, 1.0, 1.35);
   gas.position.set(0, 0, -0.08 * scaleMultiplier);
   group.add(gas);
   mats.push(gasMat);
 
-  return { group, mats };
+  const setColors = (cCore: number, cPlume: number, cGas: number) => {
+    coreMat.color.setHex(cCore);
+    plumeMat.color.setHex(cPlume);
+    gasMat.color.setHex(cGas);
+  };
+
+  const setScale = (scale: number) => {
+    group.scale.setScalar(scale);
+  };
+
+  return { group, mats, setColors, setScale };
 }
 
 export class GunViewModel {
@@ -70,6 +88,16 @@ export class GunViewModel {
   private singleFlashGroup = new THREE.Group();
   private singleFlashMats: THREE.MeshBasicMaterial[] = [];
   private singleLight = new THREE.PointLight();
+
+  // Handgun dedicated flash & light
+  private handgunFlashGroup = new THREE.Group();
+  private handgunFlashMats: THREE.MeshBasicMaterial[] = [];
+  private handgunLight = new THREE.PointLight();
+
+  // Dynamic color changers
+  private leftSetColors?: (core: number, plume: number, gas: number) => void;
+  private rightSetColors?: (core: number, plume: number, gas: number) => void;
+  private singleSetColors?: (core: number, plume: number, gas: number) => void;
 
   // Recoil & animation
   private currentRecoil: number = 0;
@@ -124,14 +152,17 @@ export class GunViewModel {
       refs.group.add(rail);
 
       // Compact realistic pale white-hot muzzle flash
-      const { group: flashGroup, mats: flashMats } = createRealisticMuzzleFlash(0.65);
+      const { group: flashGroup, mats: flashMats, setColors } = createRealisticMuzzleFlash(0.65);
       refs.flashGroup = flashGroup;
       refs.flashMats = flashMats;
       refs.flashGroup.position.set(0, 0.03, -1.6);
       refs.group.add(refs.flashGroup);
 
-      // Clean pale-white muzzle illumination
-      refs.light = new THREE.PointLight(0xfff8ea, 0, 7);
+      if (side < 0) this.leftSetColors = setColors;
+      else this.rightSetColors = setColors;
+
+      // Clean muzzle illumination
+      refs.light = new THREE.PointLight(0xfff8ea, 0, 8);
       refs.light.position.set(0, 0.03, -1.6);
       refs.group.add(refs.light);
 
@@ -244,9 +275,10 @@ export class GunViewModel {
     this.single.add(this.singleM60);
 
     // Single weapon realistic pale muzzle flash
-    const { group: sFlashGroup, mats: sFlashMats } = createRealisticMuzzleFlash(0.55);
+    const { group: sFlashGroup, mats: sFlashMats, setColors: sSetColors } = createRealisticMuzzleFlash(0.55);
     this.singleFlashGroup = sFlashGroup;
     this.singleFlashMats = sFlashMats;
+    this.singleSetColors = sSetColors;
     this.singleFlashGroup.position.set(0, 0.01, -1.52);
     this.single.add(this.singleFlashGroup);
 
@@ -290,6 +322,22 @@ export class GunViewModel {
     hgGrip.position.set(0, -0.05, -0.2);
     hgGrip.rotation.x = 0.25;
     this.handgun.add(hgGrip);
+
+    // Handgun dedicated compact flash & light
+    const { group: hgFlashGroup, mats: hgFlashMats } = createRealisticMuzzleFlash(0.35, {
+      core: 0xffffff,
+      plume: 0xfff9ec,
+      gas: 0xf2ebe2,
+    });
+    this.handgunFlashGroup = hgFlashGroup;
+    this.handgunFlashMats = hgFlashMats;
+    this.handgunFlashGroup.position.set(0, 0.03, -0.53);
+    this.handgun.add(this.handgunFlashGroup);
+
+    this.handgunLight = new THREE.PointLight(0xfffaeb, 0, 5);
+    this.handgunLight.position.set(0, 0.03, -0.53);
+    this.handgun.add(this.handgunLight);
+
     this.group.add(this.handgun);
 
     this.casingGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.045, 6);
@@ -317,39 +365,65 @@ export class GunViewModel {
       this.shapeBarrel(this.right, 'right', 0.05, 1.5);
       this.left.pod.visible = false;
       this.right.pod.visible = false;
+      // Soviet 23mm autocannon: high-pressure blast with subtle pale green-white phosphor tinge
+      this.leftSetColors?.(0xffffff, 0xf0fff4, 0xebf8ec);
+      this.rightSetColors?.(0xffffff, 0xf0fff4, 0xebf8ec);
+      this.left.light.color.setHex(0xeeffee);
+      this.right.light.color.setHex(0xeeffee);
+      this.left.flashGroup.scale.setScalar(0.65);
+      this.right.flashGroup.scale.setScalar(0.65);
     } else if (type === 'heavy_cannon') {
       this.shapeBarrel(this.left, 'left', 0.09, 1.75);
       this.shapeBarrel(this.right, 'right', 0.09, 1.75);
       this.left.pod.visible = false;
       this.right.pod.visible = false;
+      // 105mm Heavy Artillery: massive fiery combustion blast bloom
+      this.leftSetColors?.(0xffffff, 0xffaa33, 0xff5500);
+      this.rightSetColors?.(0xffffff, 0xffaa33, 0xff5500);
+      this.left.light.color.setHex(0xff7711);
+      this.right.light.color.setHex(0xff7711);
+      this.left.flashGroup.scale.setScalar(1.55);
+      this.right.flashGroup.scale.setScalar(1.55);
     } else if (type === 'm60') {
       this.singleM60.visible = true;
       this.singlePod.visible = false;
+      this.singleSetColors?.(0xffffff, 0xfff8ea, 0xf5ebe0);
+      this.singleLight.color.setHex(0xfff4dc);
+      this.singleFlashGroup.scale.setScalar(0.55);
     } else if (type === 'missile') {
       this.singleM60.visible = false;
       this.singlePod.visible = true;
+      this.singleSetColors?.(0xffffff, 0xffa522, 0xff6600);
+      this.singleLight.color.setHex(0xff9922);
+      this.singleFlashGroup.scale.setScalar(0.95);
     }
   }
 
   public triggerRecoil(intensity: number = 1.0, side: number = -1) {
     this.targetRecoil = Math.min(1.4, this.targetRecoil + 0.5 * intensity);
-    this.muzzleFlashTimer = 0.04;
     this.lastSide = side === 0 ? -1 : side;
 
-    const isTwin = this.weaponType === 'aa_gun' || this.weaponType === 'heavy_cannon';
-
-    if (isTwin) {
+    if (this.weaponType === 'handgun') {
+      this.muzzleFlashTimer = 0.035;
+      this.handgunFlashMats.forEach((m) => { m.opacity = 1.0; });
+      this.handgunFlashGroup.scale.setScalar(0.95 + Math.random() * 0.15);
+      this.handgunLight.intensity = 2.0 * intensity;
+    } else if (this.weaponType === 'aa_gun' || this.weaponType === 'heavy_cannon') {
+      const isHeavy = this.weaponType === 'heavy_cannon';
+      this.muzzleFlashTimer = isHeavy ? 0.075 : 0.04;
       const flip = (refs: UnitRefs, on: boolean) => {
         refs.flashMats.forEach((m) => { m.opacity = on ? 1.0 : 0; });
         refs.flashGroup.scale.setScalar(on ? (0.95 + Math.random() * 0.15) : 1);
-        refs.light.intensity = on ? 2.8 * intensity : 0;
+        refs.light.intensity = on ? (isHeavy ? 5.5 : 2.8) * intensity : 0;
       };
       flip(this.left, this.lastSide < 0);
       flip(this.right, this.lastSide > 0);
     } else {
+      const isMissile = this.weaponType === 'missile';
+      this.muzzleFlashTimer = isMissile ? 0.065 : 0.04;
       this.singleFlashMats.forEach((m) => { m.opacity = 1.0; });
       this.singleFlashGroup.scale.setScalar(0.95 + Math.random() * 0.15);
-      this.singleLight.intensity = 2.8 * intensity;
+      this.singleLight.intensity = (isMissile ? 3.6 : 2.6) * intensity;
     }
 
     this.ejectCasing();
@@ -399,6 +473,8 @@ export class GunViewModel {
         this.right.light.intensity = 0;
         this.singleFlashMats.forEach((m) => { m.opacity = 0; });
         this.singleLight.intensity = 0;
+        this.handgunFlashMats.forEach((m) => { m.opacity = 0; });
+        this.handgunLight.intensity = 0;
       }
     }
 

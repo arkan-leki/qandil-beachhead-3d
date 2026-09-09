@@ -101,6 +101,7 @@ export interface TankWreckage {
 export interface ProjectileEntity {
   id: number;
   type: 'player_bullet' | 'player_cannon' | 'player_missile' | 'player_drone' | 'enemy_bullet' | 'enemy_shell' | 'enemy_rocket';
+  weaponSource?: WeaponType;
   mesh: any;
   position: { x: number; y: number; z: number };
   velocity: { x: number; y: number; z: number };
@@ -111,6 +112,10 @@ export interface ProjectileEntity {
   targetId?: number; // for homing missiles
   hp?: number;       // shootable enemy shells (interception mechanic)
   dead?: boolean;    // marked for safe removal to prevent array mutation bugs during iteration
+  gravity?: number;  // downward ballistic gravity acceleration (e.g. 105mm artillery or handgun)
+  ricochets?: number; // number of times this round has ricocheted off the ground
+  trailColor?: string; // custom smoke/tracer trail color
+  trailTimer?: number;
 }
 
 export interface ParticleEntity {
