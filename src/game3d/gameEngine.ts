@@ -1194,7 +1194,7 @@ export class GameEngine {
 
       const localMuzzle = isLeft ? this.muzzlePoints.left : this.muzzlePoints.right;
       const worldMuzzle = localMuzzle.clone().applyMatrix4(this.turretPitchGroup.matrixWorld);
-      this.spawnMuzzleFlash(worldMuzzle, 1.1, '#ffd020');
+      this.spawnMuzzleFlash(worldMuzzle, 0.45, '#f7f4ec');
 
       this.spawnPlayerProjectile('player_bullet', fireOrigin, dir, w.projectileSpeed, w.damage, w.splashRadius);
       this.screenShake = Math.min(0.22, this.screenShake + 0.04);
@@ -1221,7 +1221,7 @@ export class GameEngine {
         : (this.aaBarrelPhase ? this.muzzlePoints.right : this.muzzlePoints.right2);
       const worldMuzzle = localMuzzle.clone().applyMatrix4(this.turretPitchGroup.matrixWorld);
 
-      this.spawnMuzzleFlash(worldMuzzle, 1.3, '#ffcc22');
+      this.spawnMuzzleFlash(worldMuzzle, 0.6, '#fbf8f0');
 
       // Create high-velocity 23mm tracer projectile
       this.spawnPlayerProjectile('player_bullet', fireOrigin, dir, w.projectileSpeed, w.damage, w.splashRadius);
@@ -1240,7 +1240,7 @@ export class GameEngine {
 
       const worldMuzzle = (this.cannonSide ? this.muzzlePoints.cannonL : this.muzzlePoints.cannonR)
         .clone().applyMatrix4(this.turretPitchGroup.matrixWorld);
-      this.spawnMuzzleFlash(worldMuzzle, 2.6, '#ffa511');
+      this.spawnMuzzleFlash(worldMuzzle, 1.2, '#fffdf6');
 
       this.spawnPlayerProjectile('player_cannon', fireOrigin, dir, w.projectileSpeed, w.damage, w.splashRadius);
       this.screenShake = Math.min(0.65, this.screenShake + 0.35);
@@ -1253,7 +1253,7 @@ export class GameEngine {
       const localMuzzle = isLeft ? this.muzzlePoints.rocketL : this.muzzlePoints.rocketR;
       const worldMuzzle = localMuzzle.clone().applyMatrix4(this.turretPitchGroup.matrixWorld);
 
-      this.spawnMuzzleFlash(worldMuzzle, 1.8, '#ff9922');
+      this.spawnMuzzleFlash(worldMuzzle, 0.8, '#f5ede0');
 
       // Find best target near crosshair for homing guidance
       const target = this.findTargetInCrosshair(dir);
@@ -1268,7 +1268,7 @@ export class GameEngine {
 
       const localMuzzle = this.muzzlePoints.center.clone();
       const worldMuzzle = localMuzzle.clone().applyMatrix4(this.turretPitchGroup.matrixWorld);
-      this.spawnMuzzleFlash(worldMuzzle, 0.8, '#ffe444');
+      this.spawnMuzzleFlash(worldMuzzle, 0.35, '#faf7f2');
 
       this.spawnPlayerProjectile('player_bullet', fireOrigin, dir, w.projectileSpeed, w.damage, w.splashRadius);
       this.screenShake = Math.min(0.14, this.screenShake + 0.03);
@@ -1313,18 +1313,18 @@ export class GameEngine {
 
   private getPlayerBulletMesh(): THREE.Mesh {
     if (!GameEngine.playerBulletGeo) {
-      GameEngine.playerBulletGeo = new THREE.CylinderGeometry(0.06, 0.06, 1.2, 6);
+      GameEngine.playerBulletGeo = new THREE.CylinderGeometry(0.05, 0.05, 1.1, 6);
       GameEngine.playerBulletGeo.rotateX(Math.PI / 2);
-      GameEngine.playerBulletMat = new THREE.MeshBasicMaterial({ color: 0xffea33 });
+      GameEngine.playerBulletMat = new THREE.MeshBasicMaterial({ color: 0xfffbe8 });
     }
     return new THREE.Mesh(GameEngine.playerBulletGeo, GameEngine.playerBulletMat!);
   }
 
   private getPlayerCannonMesh(): THREE.Mesh {
     if (!GameEngine.playerCannonGeo) {
-      GameEngine.playerCannonGeo = new THREE.CylinderGeometry(0.18, 0.18, 1.8, 8);
+      GameEngine.playerCannonGeo = new THREE.CylinderGeometry(0.14, 0.14, 1.6, 8);
       GameEngine.playerCannonGeo.rotateX(Math.PI / 2);
-      GameEngine.playerCannonMat = new THREE.MeshBasicMaterial({ color: 0xffbb22 });
+      GameEngine.playerCannonMat = new THREE.MeshBasicMaterial({ color: 0xfffaec });
     }
     return new THREE.Mesh(GameEngine.playerCannonGeo, GameEngine.playerCannonMat!);
   }
@@ -1374,45 +1374,44 @@ export class GameEngine {
     });
   }
 
-  private spawnMuzzleFlash(pos: THREE.Vector3, scale: number, color: string) {
-    // 1. Blinding incandescent white-hot core
+  private spawnMuzzleFlash(pos: THREE.Vector3, scale: number, color: string = '#fcf8f0') {
+    // 1. Crisp incandescent white-hot core
     this.particles.push({
-      x: pos.x, y: pos.y, z: pos.z, vx: 0, vy: (Math.random() - 0.5) * 0.8, vz: 0,
-      color: '#ffffff', size: scale * 4.2, life: 0, maxLife: 0.08,
+      x: pos.x, y: pos.y, z: pos.z, vx: 0, vy: (Math.random() - 0.5) * 0.4, vz: 0,
+      color: '#ffffff', size: scale * 1.0, life: 0, maxLife: 0.04,
     });
-    // 2. Vivid golden-yellow fireball burst (Beach Head 2000 incandescent blast)
+    // 2. Light propellant gas expansion (compact pale-white/ivory, not saturated yellow)
     this.particles.push({
-      x: pos.x, y: pos.y, z: pos.z, vx: (Math.random() - 0.5) * 1.0, vy: (Math.random() - 0.5) * 1.0, vz: (Math.random() - 0.5) * 1.0,
-      color: '#ffea28', size: scale * 6.0, life: 0, maxLife: 0.11,
+      x: pos.x, y: pos.y, z: pos.z, vx: (Math.random() - 0.5) * 0.6, vy: (Math.random() - 0.5) * 0.6, vz: (Math.random() - 0.5) * 0.6,
+      color: color || '#faf6ee', size: scale * 1.5, life: 0, maxLife: 0.05,
     });
-    // 3. High-velocity fiery flame petals / sparks in yellow and hot amber
-    const sparkCount = Math.round(5 * Math.max(1, scale * 0.8));
-    for (let i = 0; i < sparkCount; i++) {
+    // 3. Very subtle momentary sparks (light cream/white)
+    if (Math.random() < 0.65) {
       this.particles.push({
-        x: pos.x + (Math.random() - 0.5) * 0.3 * scale,
-        y: pos.y + (Math.random() - 0.5) * 0.3 * scale,
-        z: pos.z + (Math.random() - 0.5) * 0.3 * scale,
-        vx: (Math.random() - 0.5) * 7.5,
-        vy: (Math.random() - 0.5) * 7.5,
-        vz: (Math.random() - 0.5) * 7.5,
-        color: Math.random() < 0.7 ? '#ffd410' : '#ff9400',
-        size: scale * (0.8 + Math.random() * 0.7),
+        x: pos.x + (Math.random() - 0.5) * 0.15 * scale,
+        y: pos.y + (Math.random() - 0.5) * 0.15 * scale,
+        z: pos.z + (Math.random() - 0.5) * 0.15 * scale,
+        vx: (Math.random() - 0.5) * 3.5,
+        vy: (Math.random() - 0.5) * 3.5,
+        vz: (Math.random() - 0.5) * 3.5,
+        color: '#f8f4ec',
+        size: scale * 0.35,
         life: 0,
-        maxLife: 0.16,
+        maxLife: 0.055,
       });
     }
-    // 4. Wispy gun smoke puff dispersing from muzzle
+    // 4. Subtle, thin muzzle smoke puff
     this.particles.push({
-      x: pos.x + (Math.random() - 0.5) * 0.2,
-      y: pos.y + 0.1,
-      z: pos.z + (Math.random() - 0.5) * 0.2,
-      vx: (Math.random() - 0.5) * 1.5,
-      vy: 1.2 + Math.random() * 1.2,
-      vz: (Math.random() - 0.5) * 1.5,
+      x: pos.x + (Math.random() - 0.5) * 0.1,
+      y: pos.y + 0.05,
+      z: pos.z + (Math.random() - 0.5) * 0.1,
+      vx: (Math.random() - 0.5) * 0.8,
+      vy: 0.8 + Math.random() * 0.8,
+      vz: (Math.random() - 0.5) * 0.8,
       color: '#dedad2',
-      size: scale * 3.2,
+      size: scale * 1.3,
       life: 0,
-      maxLife: 0.45,
+      maxLife: 0.25,
       smoke: true,
     });
   }
@@ -2691,8 +2690,8 @@ export class GameEngine {
     );
     const dir = target.sub(origin).normalize();
 
-    // Searing yellow muzzle flash from tank cannon
-    this.spawnMuzzleFlash(origin, 2.6, '#ffaa22');
+    // Realistic pale-white muzzle flash from tank cannon
+    this.spawnMuzzleFlash(origin, 1.2, '#fbf8f0');
 
     this.spawnEnemyProjectile('enemy_shell', origin, dir, 70, Math.max(5, Math.round(18 * diff.damageMult * this.waveScale(this.stats.wave).damageMult)));
   }
@@ -2710,7 +2709,7 @@ export class GameEngine {
     const dir = target.sub(origin).normalize();
 
     // Autocannon muzzle flash
-    this.spawnMuzzleFlash(origin, 1.4, '#ffcc33');
+    this.spawnMuzzleFlash(origin, 0.6, '#f7f4ec');
 
     this.spawnEnemyProjectile('enemy_bullet', origin, dir, 90, Math.max(2, Math.round(6 * diff.damageMult * this.waveScale(this.stats.wave).damageMult)));
   }

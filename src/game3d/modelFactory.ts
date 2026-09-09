@@ -2699,6 +2699,180 @@ export function createBunkerRedoubt(): THREE.Group {
   redLed.position.set(-3.2, 0.45, 0.42);
   bunker.add(redLed);
 
+  // 8. Outer Perimeter Defensive Barrier Ring (Surrounding the Bunker Redoubt)
+  const barrierGroup = new THREE.Group();
+  barrierGroup.name = 'bunker_defensive_barrier';
+
+  // A. Reinforced Concrete Blast Barriers (Jersey Security Barriers) in a 360-degree perimeter ring
+  const barrierRadius = 7.4;
+  const numBarrierSegments = 18;
+  const barrierWidth = (Math.PI * 2 * barrierRadius) / numBarrierSegments;
+
+  const baseGeo = new THREE.BoxGeometry(barrierWidth * 0.94, 0.28, 0.58);
+  const midGeo = new THREE.BoxGeometry(barrierWidth * 0.92, 0.36, 0.38);
+  const crownGeo = new THREE.BoxGeometry(barrierWidth * 0.90, 0.38, 0.22);
+  const steelCapGeo = new THREE.BoxGeometry(barrierWidth * 0.88, 0.04, 0.24);
+  const hazardPanelGeo = new THREE.BoxGeometry(0.85, 0.22, 0.03);
+  const stanchionGeo = new THREE.CylinderGeometry(0.032, 0.032, 0.58, 8);
+  const razorWireGeo = new THREE.TorusGeometry(0.19, 0.016, 6, 16);
+  const cableGeo = new THREE.CylinderGeometry(0.008, 0.008, barrierWidth * 0.98, 4);
+  cableGeo.rotateZ(Math.PI / 2);
+
+  for (let s = 0; s < numBarrierSegments; s++) {
+    const angle = (s / numBarrierSegments) * Math.PI * 2;
+    // Leave rear access gap for the bunker entrance (around angle = Math.PI / 2, i.e., +Z direction)
+    const diffFromRear = Math.abs(Math.atan2(Math.sin(angle - Math.PI / 2), Math.cos(angle - Math.PI / 2)));
+    if (diffFromRear < 0.32) {
+      continue; // Sally port entrance gap
+    }
+
+    const bx = Math.cos(angle) * barrierRadius;
+    const bz = Math.sin(angle) * barrierRadius;
+    const segRotY = -angle + Math.PI / 2;
+
+    const segGroup = new THREE.Group();
+    segGroup.position.set(bx, 0, bz);
+    segGroup.rotation.y = segRotY;
+
+    // Concrete Footing Base
+    const baseMesh = new THREE.Mesh(baseGeo, materials.concrete);
+    baseMesh.position.y = 0.14;
+    baseMesh.receiveShadow = true;
+    segGroup.add(baseMesh);
+
+    // Tapered Incline
+    const midMesh = new THREE.Mesh(midGeo, materials.concrete);
+    midMesh.position.y = 0.44;
+    midMesh.receiveShadow = true;
+    segGroup.add(midMesh);
+
+    // Top Vertical Barrier
+    const crownMesh = new THREE.Mesh(crownGeo, materials.concrete);
+    crownMesh.position.y = 0.79;
+    crownMesh.receiveShadow = true;
+    segGroup.add(crownMesh);
+
+    // Steel Armor Cap Plate
+    const capMesh = new THREE.Mesh(steelCapGeo, materials.darkSteel);
+    capMesh.position.y = 1.0;
+    segGroup.add(capMesh);
+
+    // Hazard Stripes on outer-facing side of key segments
+    if (s % 3 === 0 || diffFromRear < 0.6) {
+      const hazardPanel = new THREE.Mesh(hazardPanelGeo, materials.hazardSign);
+      hazardPanel.position.set(0, 0.44, 0.20);
+      segGroup.add(hazardPanel);
+    }
+
+    // Steel stanchions and barbed tension cables on top of alternate barriers
+    if (s % 2 === 0) {
+      const stanchionL = new THREE.Mesh(stanchionGeo, materials.darkSteel);
+      stanchionL.position.set(-barrierWidth * 0.38, 1.30, 0);
+      segGroup.add(stanchionL);
+
+      const stanchionR = new THREE.Mesh(stanchionGeo, materials.darkSteel);
+      stanchionR.position.set(barrierWidth * 0.38, 1.30, 0);
+      segGroup.add(stanchionR);
+
+      // High-tension barbed wire cables
+      const cableTop = new THREE.Mesh(cableGeo, materials.darkSteel);
+      cableTop.position.set(0, 1.52, 0);
+      segGroup.add(cableTop);
+
+      const cableMid = new THREE.Mesh(cableGeo, materials.darkSteel);
+      cableMid.position.set(0, 1.25, 0);
+      segGroup.add(cableMid);
+    }
+
+    // Concertina razor wire loops running along crown
+    for (let c = -1; c <= 1; c++) {
+      const wire = new THREE.Mesh(razorWireGeo, materials.darkSteel);
+      wire.position.set(c * (barrierWidth * 0.28), 1.18, 0);
+      wire.rotation.y = Math.PI / 2;
+      segGroup.add(wire);
+    }
+
+    barrierGroup.add(segGroup);
+  }
+
+  // B. Anti-Tank Czech Hedgehogs (Placed at key enemy approach vectors outside the barrier)
+  const hedgehogAngles = [-Math.PI * 0.75, -Math.PI * 0.5, -Math.PI * 0.25, 0, Math.PI * 0.25, Math.PI * 0.85];
+  const beamGeo = new THREE.BoxGeometry(1.4, 0.12, 0.09);
+  const gussetGeo = new THREE.BoxGeometry(0.24, 0.24, 0.24);
+
+  for (let i = 0; i < hedgehogAngles.length; i++) {
+    const hAngle = hedgehogAngles[i];
+    const hDist = 10.2 + (i % 2 === 0 ? 0.8 : -0.6);
+    const hx = Math.cos(hAngle) * hDist;
+    const hz = Math.sin(hAngle) * hDist;
+
+    const hedgehog = new THREE.Group();
+    hedgehog.position.set(hx, 0.55, hz);
+    hedgehog.rotation.set(0.35, hAngle + 0.4, 0.25);
+
+    // Three orthogonal welded steel beams
+    const b1 = new THREE.Mesh(beamGeo, materials.darkSteel);
+    const b2 = new THREE.Mesh(beamGeo, materials.darkSteel);
+    b2.rotation.y = Math.PI / 2;
+    const b3 = new THREE.Mesh(beamGeo, materials.darkSteel);
+    b3.rotation.z = Math.PI / 2;
+
+    const gusset = new THREE.Mesh(gussetGeo, materials.armorSteel);
+
+    hedgehog.add(b1, b2, b3, gusset);
+    barrierGroup.add(hedgehog);
+  }
+
+  // C. Sandbag Blast Revetment Wings flanking the rear entrance
+  const flankBagGeo = new THREE.BoxGeometry(0.9, 0.22, 0.45);
+  for (const side of [-1, 1]) {
+    for (let layer = 0; layer < 3; layer++) {
+      for (let step = 0; step < 2; step++) {
+        const fBag = new THREE.Mesh(flankBagGeo, materials.sandbags);
+        const fx = side * (1.65 + step * 0.4);
+        const fy = 0.11 + layer * 0.22;
+        const fz = 7.15 + (layer % 2 === 0 ? 0.05 : -0.05);
+        fBag.position.set(fx, fy, fz);
+        fBag.rotation.y = side * 0.25;
+        barrierGroup.add(fBag);
+      }
+    }
+  }
+
+  // D. Military Checkpoint Security Bollards & Boom Gate Arm at rear entrance gap
+  const bollardGeo = new THREE.CylinderGeometry(0.2, 0.24, 0.95, 12);
+  const reflectorGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.08, 12);
+  for (const bx of [-1.35, 1.35]) {
+    const bollard = new THREE.Mesh(bollardGeo, materials.concrete);
+    bollard.position.set(bx, 0.47, 7.35);
+    barrierGroup.add(bollard);
+
+    const reflector = new THREE.Mesh(reflectorGeo, materials.lensRed);
+    reflector.position.set(bx, 0.98, 7.35);
+    barrierGroup.add(reflector);
+  }
+
+  // Pivot Post & Counterweight
+  const gatePost = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.85, 0.24), materials.darkSteel);
+  gatePost.position.set(-1.22, 0.42, 7.35);
+  barrierGroup.add(gatePost);
+
+  // Lowered Gate Arm with alternating red/white warning sections
+  const armGeo = new THREE.BoxGeometry(2.35, 0.10, 0.05);
+  const gateArm = new THREE.Mesh(armGeo, materials.armorSteel);
+  gateArm.position.set(0, 0.65, 7.35);
+  barrierGroup.add(gateArm);
+
+  // Red warning stripes across the gate arm
+  const stripeGeo = new THREE.BoxGeometry(0.28, 0.11, 0.06);
+  for (let sx = -0.8; sx <= 0.8; sx += 0.55) {
+    const stripe = new THREE.Mesh(stripeGeo, materials.lensRed);
+    stripe.position.set(sx, 0.65, 7.35);
+    barrierGroup.add(stripe);
+  }
+
+  bunker.add(barrierGroup);
+
   return bunker;
 }
 

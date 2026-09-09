@@ -21,43 +21,33 @@ interface UnitRefs {
   pod: THREE.Group;
 }
 
-// Builds a multi-layered incandescent golden-yellow muzzle blast fireball (Beach Head 2000 style)
-function createGoldenMuzzleFlash(scaleMultiplier: number = 1.0): { group: THREE.Group; mats: THREE.MeshBasicMaterial[] } {
+// Builds a realistic, compact, pale white-hot muzzle flash (no starburst cross planes, no saturated yellow)
+function createRealisticMuzzleFlash(scaleMultiplier: number = 1.0): { group: THREE.Group; mats: THREE.MeshBasicMaterial[] } {
   const group = new THREE.Group();
   const mats: THREE.MeshBasicMaterial[] = [];
 
-  // 1. Incandescent white-hot core
+  // 1. Incandescent white-hot ignition core (tight at muzzle brake)
   const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 });
-  const core = new THREE.Mesh(new THREE.SphereGeometry(0.14 * scaleMultiplier, 8, 8), coreMat);
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.045 * scaleMultiplier, 8, 8), coreMat);
+  core.position.set(0, 0, -0.04 * scaleMultiplier);
   group.add(core);
   mats.push(coreMat);
 
-  // 2. Searing golden-yellow fiery blast sphere (elongated along firing axis)
-  const fireballMat = new THREE.MeshBasicMaterial({ color: 0xffea22, transparent: true, opacity: 0 });
-  const fireball = new THREE.Mesh(new THREE.SphereGeometry(0.32 * scaleMultiplier, 10, 8), fireballMat);
-  fireball.scale.set(1.1, 1.1, 1.7);
-  fireball.position.set(0, 0, -0.16 * scaleMultiplier);
-  group.add(fireball);
-  mats.push(fireballMat);
+  // 2. High-speed pale white-hot propellant plume (compact conical jet exiting muzzle)
+  const plumeMat = new THREE.MeshBasicMaterial({ color: 0xfffef5, transparent: true, opacity: 0 });
+  const plume = new THREE.Mesh(new THREE.ConeGeometry(0.065 * scaleMultiplier, 0.16 * scaleMultiplier, 8), plumeMat);
+  plume.rotation.x = -Math.PI / 2;
+  plume.position.set(0, 0, -0.09 * scaleMultiplier);
+  group.add(plume);
+  mats.push(plumeMat);
 
-  // 3. Hot amber-orange outer blast cone
-  const coronaMat = new THREE.MeshBasicMaterial({ color: 0xff8800, transparent: true, opacity: 0 });
-  const corona = new THREE.Mesh(new THREE.ConeGeometry(0.34 * scaleMultiplier, 0.72 * scaleMultiplier, 8), coronaMat);
-  corona.rotation.x = -Math.PI / 2;
-  corona.position.set(0, 0, -0.34 * scaleMultiplier);
-  group.add(corona);
-  mats.push(coronaMat);
-
-  // 4. 4-pointed cross starburst petals (quad muzzle flash hider jets)
-  const petalMat = new THREE.MeshBasicMaterial({ color: 0xffcc11, transparent: true, opacity: 0, side: THREE.DoubleSide });
-  const petalGeo = new THREE.PlaneGeometry(0.72 * scaleMultiplier, 0.72 * scaleMultiplier);
-  const p1 = new THREE.Mesh(petalGeo, petalMat);
-  p1.position.set(0, 0, -0.15 * scaleMultiplier);
-  const p2 = new THREE.Mesh(petalGeo, petalMat);
-  p2.position.set(0, 0, -0.15 * scaleMultiplier);
-  p2.rotation.z = Math.PI / 4;
-  group.add(p1, p2);
-  mats.push(petalMat);
+  // 3. Faint translucent outer gas envelope (soft light ivory, not saturated yellow)
+  const gasMat = new THREE.MeshBasicMaterial({ color: 0xf5f0e6, transparent: true, opacity: 0 });
+  const gas = new THREE.Mesh(new THREE.SphereGeometry(0.075 * scaleMultiplier, 8, 8), gasMat);
+  gas.scale.set(1.0, 1.0, 1.35);
+  gas.position.set(0, 0, -0.08 * scaleMultiplier);
+  group.add(gas);
+  mats.push(gasMat);
 
   return { group, mats };
 }
@@ -133,15 +123,15 @@ export class GunViewModel {
       rail.position.set(0, 0.12, -0.5);
       refs.group.add(rail);
 
-      // Multi-layer incandescent golden-yellow muzzle blast fireball
-      const { group: flashGroup, mats: flashMats } = createGoldenMuzzleFlash(1.0);
+      // Compact realistic pale white-hot muzzle flash
+      const { group: flashGroup, mats: flashMats } = createRealisticMuzzleFlash(0.65);
       refs.flashGroup = flashGroup;
       refs.flashMats = flashMats;
       refs.flashGroup.position.set(0, 0.03, -1.6);
       refs.group.add(refs.flashGroup);
 
-      // Dynamic golden flash light that illuminates gun barrels and bunker
-      refs.light = new THREE.PointLight(0xffd020, 0, 14);
+      // Clean pale-white muzzle illumination
+      refs.light = new THREE.PointLight(0xfff8ea, 0, 7);
       refs.light.position.set(0, 0.03, -1.6);
       refs.group.add(refs.light);
 
@@ -253,14 +243,14 @@ export class GunViewModel {
 
     this.single.add(this.singleM60);
 
-    // Single weapon golden muzzle flash assembly
-    const { group: sFlashGroup, mats: sFlashMats } = createGoldenMuzzleFlash(0.85);
+    // Single weapon realistic pale muzzle flash
+    const { group: sFlashGroup, mats: sFlashMats } = createRealisticMuzzleFlash(0.55);
     this.singleFlashGroup = sFlashGroup;
     this.singleFlashMats = sFlashMats;
     this.singleFlashGroup.position.set(0, 0.01, -1.52);
     this.single.add(this.singleFlashGroup);
 
-    this.singleLight = new THREE.PointLight(0xffd020, 0, 12);
+    this.singleLight = new THREE.PointLight(0xfff8ea, 0, 7);
     this.singleLight.position.set(0, 0.01, -1.52);
     this.single.add(this.singleLight);
 
@@ -343,24 +333,23 @@ export class GunViewModel {
 
   public triggerRecoil(intensity: number = 1.0, side: number = -1) {
     this.targetRecoil = Math.min(1.4, this.targetRecoil + 0.5 * intensity);
-    this.muzzleFlashTimer = 0.07;
+    this.muzzleFlashTimer = 0.04;
     this.lastSide = side === 0 ? -1 : side;
 
     const isTwin = this.weaponType === 'aa_gun' || this.weaponType === 'heavy_cannon';
-    const isMissile = this.weaponType === 'missile';
 
     if (isTwin) {
       const flip = (refs: UnitRefs, on: boolean) => {
         refs.flashMats.forEach((m) => { m.opacity = on ? 1.0 : 0; });
-        refs.flashGroup.scale.setScalar(on ? (1.0 + Math.random() * 0.7) : 1);
-        refs.light.intensity = on ? 7.5 * intensity : 0;
+        refs.flashGroup.scale.setScalar(on ? (0.95 + Math.random() * 0.15) : 1);
+        refs.light.intensity = on ? 2.8 * intensity : 0;
       };
       flip(this.left, this.lastSide < 0);
       flip(this.right, this.lastSide > 0);
     } else {
       this.singleFlashMats.forEach((m) => { m.opacity = 1.0; });
-      this.singleFlashGroup.scale.setScalar(1.0 + Math.random() * 0.7);
-      this.singleLight.intensity = 7.5 * intensity;
+      this.singleFlashGroup.scale.setScalar(0.95 + Math.random() * 0.15);
+      this.singleLight.intensity = 2.8 * intensity;
     }
 
     this.ejectCasing();
