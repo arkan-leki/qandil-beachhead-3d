@@ -100,6 +100,9 @@ export interface Translations {
 
   // Weapon Names
   weaponNames: Record<WeaponType, { label: string; short: string }>;
+  armoryTitle: string;
+  equipped: string;
+  weaponRoles: Record<WeaponType, string>;
 }
 
 export const I18N: Record<Language, Translations> = {
@@ -201,6 +204,15 @@ export const I18N: Record<Language, Translations> = {
       missile: { label: 'Stinger SAM Missile', short: 'SAM' },
       handgun: { label: '.45 Tactical Pistol', short: '.45' },
     },
+    armoryTitle: 'TACTICAL ARMORY',
+    equipped: 'EQUIPPED',
+    weaponRoles: {
+      m60: 'Rapid Fire · Anti-Infantry & Supply Drops',
+      aa_gun: 'Twin 23mm Flak · Fast Jets & Light Armor',
+      heavy_cannon: '105mm AP · Heavy Tanks & Bunkers',
+      missile: 'Guided Stinger SAM · Attack Choppers',
+      handgun: 'Emergency Tactical .45 · Close Defense',
+    },
   },
 
   ku: {
@@ -301,6 +313,15 @@ export const I18N: Record<Language, Translations> = {
       missile: { label: 'مووشەکی ستینگەر', short: 'SAM' },
       handgun: { label: 'دەمانچەی تاکتیکی', short: 'دەمانچە' },
     },
+    armoryTitle: 'کۆگای تاکتیکی چەکەکان',
+    equipped: 'هەڵبژێردراوە',
+    weaponRoles: {
+      m60: 'دەسڕێژی خێرا دژی پیادە و یارمەتییەکان',
+      aa_gun: 'دژە فڕۆکەی خێرا و ئۆتۆمبێلی سووک',
+      heavy_cannon: 'تۆپی قورس بۆ تانک و زرێپۆش',
+      missile: 'مووشەکی زیرەک بۆ کۆپتەر و فڕۆکە',
+      handgun: 'دەمانچەی فریاکەوتن بۆ نزیک',
+    },
   },
 
   zh: {
@@ -400,6 +421,15 @@ export const I18N: Record<Language, Translations> = {
       heavy_cannon: { label: '105毫米反装甲重型火炮', short: '105MM' },
       missile: { label: '毒刺防空导弹', short: 'SAM' },
       handgun: { label: '.45口径战术自卫手枪', short: '手枪' },
+    },
+    armoryTitle: '战术军火库',
+    equipped: '已装配',
+    weaponRoles: {
+      m60: '高射速压制 · 步兵与空投木箱',
+      aa_gun: '23毫米速射机炮 · 喷气战机与轻装甲',
+      heavy_cannon: '105毫米高爆穿甲炮 · 重型装甲坦克',
+      missile: '便携毒刺制导导弹 · 武装直升机与战机',
+      handgun: '紧急自卫手枪 · 近距离应急防守',
     },
   },
 };

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Volume2, VolumeX, Plane, Crosshair } from 'lucide-react';
+import { Volume2, VolumeX, Plane, Crosshair, RotateCcw, X, Shield } from 'lucide-react';
 import { GameStats, Language, RadarBlip, WeaponState, WeaponType } from '../types';
 import { RadarHUD } from './RadarHUD';
 import { I18N } from '../i18n';
@@ -94,49 +94,94 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
     }
   }, [stats.wave, isNight]);
 
-  // --- GTA-style weapon wheel: HOLD the guns button to open, release over a weapon ---
-  const [wheelOpen, setWheelOpen] = useState(false);
-  const [highlight, setHighlight] = useState<number>(-1);
-  const wheelHold = useRef<number | null>(null);
-  const wheelAnchor = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const wheelActive = useRef(false);
+  // --- Modern Tactical Armory & Quick Weapon Switcher ---
+  const [armoryOpen, setArmoryOpen] = useState(false);
+  const [dragHoveredIndex, setDragHoveredIndex] = useState<number>(-1);
+  const holdTimerRef = useRef<number | null>(null);
+  const isHoldingRef = useRef(false);
 
-  const wheelCenter = () => {
-    // wheel is rendered as a big circle centered near the bottom of the screen
-    return { x: window.innerWidth / 2, y: window.innerHeight * 0.62 };
+  const cycleNextWeapon = () => {
+    const order: WeaponType[] = ['m60', 'aa_gun', 'heavy_cannon', 'missile', 'handgun'];
+    const idx = order.indexOf(currentWeapon);
+    const next = order[(idx + 1) % order.length];
+    onSwitchWeapon(next);
+    if (navigator.vibrate) navigator.vibrate(30);
   };
 
-  const openWheel = (e: React.PointerEvent) => {
-    wheelAnchor.current = { x: e.clientX, y: e.clientY };
-    wheelHold.current = window.setTimeout(() => {
-      setWheelOpen(true);
-      wheelActive.current = true;
-      // highlight nothing yet; release picks weapon under finger
-      setHighlight(-1);
-    }, 180);
-  };
+  const handleGunPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    isHoldingRef.current = false;
+    setDragHoveredIndex(-1);
 
-  const moveWheel = (e: React.PointerEvent) => {
-    if (!wheelActive.current) return;
-    const c = wheelCenter();
-    const ang = Math.atan2(e.clientY - c.y, e.clientX - c.x) + Math.PI; // 0..2PI
-    const n = WEAPON_LIST.length;
-    // slots spread clockwise starting right
-    const slot = Math.floor(((ang / (Math.PI * 2)) * n + 0.5) % n);
-    setHighlight(slot);
-  };
-
-  const closeWheel = (e?: React.PointerEvent) => {
-    if (wheelHold.current) { clearTimeout(wheelHold.current); wheelHold.current = null; }
-    if (wheelActive.current) {
-      wheelActive.current = false;
-      if (e && highlight >= 0 && highlight < WEAPON_LIST.length) {
-        const w = WEAPON_LIST[highlight];
-        if (w.type !== currentWeapon) onSwitchWeapon(w.type);
-      }
-      setWheelOpen(false);
-      setHighlight(-1);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // ignore
     }
+
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+    holdTimerRef.current = window.setTimeout(() => {
+      isHoldingRef.current = true;
+      setArmoryOpen(true);
+      if (navigator.vibrate) navigator.vibrate(35);
+    }, 220);
+  };
+
+  const handleGunPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!isHoldingRef.current && !armoryOpen) return;
+    const elements = document.elementsFromPoint(e.clientX, e.clientY);
+    let foundIdx = -1;
+    for (const el of elements) {
+      const idxAttr = el.getAttribute('data-weapon-index');
+      if (idxAttr !== null) {
+        foundIdx = parseInt(idxAttr, 10);
+        break;
+      }
+    }
+    if (foundIdx !== dragHoveredIndex) {
+      setDragHoveredIndex(foundIdx);
+      if (foundIdx >= 0 && navigator.vibrate) navigator.vibrate(15);
+    }
+  };
+
+  const handleGunPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+
+    // Quick tap: cycle to next weapon immediately!
+    if (!isHoldingRef.current) {
+      cycleNextWeapon();
+      return;
+    }
+
+    // If held and dragged over a weapon card, equip it and close armory!
+    if (dragHoveredIndex >= 0 && dragHoveredIndex < WEAPON_LIST.length) {
+      const targetWeapon = WEAPON_LIST[dragHoveredIndex].type;
+      onSwitchWeapon(targetWeapon);
+      if (navigator.vibrate) navigator.vibrate(40);
+      setArmoryOpen(false);
+    }
+    // If held in place without dragging onto another card, keep armory open so user can inspect or tap!
+    isHoldingRef.current = false;
+    setDragHoveredIndex(-1);
+  };
+
+  const handleGunPointerCancel = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    isHoldingRef.current = false;
+    setDragHoveredIndex(-1);
   };
 
   return (
@@ -304,240 +349,393 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
         </div>
       </div>
 
-      {/* ---- Bottom: health bar, weapon wheel trigger, fire ---- */}
-      <div className="flex items-end justify-between gap-2 w-full">
-        {/* Health (compact vertical-friendly) */}
-        <div className="w-16 sm:w-36 pointer-events-none flex flex-col gap-1">
-          <div className="h-2 sm:h-3 w-full bg-zinc-900/80 border border-zinc-700 rounded-sm overflow-hidden">
-            <div
-              className={`h-full transition-all duration-200 ${
-                isCritical ? 'bg-red-600' : hpPercent < 60 ? 'bg-amber-500' : 'bg-emerald-500'
-              }`}
-              style={{ width: `${hpPercent}%` }}
-            ></div>
-          </div>
-          <div className={`font-mono text-[10px] sm:text-xs font-bold ${isCritical ? 'text-red-400' : 'text-emerald-400'}`}>
-            {Math.round(hpPercent)}%
-          </div>
-        </div>
-
-        {/* Weapon wheel trigger + active weapon readout */}
-        <div className="flex flex-col items-center gap-1">
-          <div className="flex items-center gap-2 bg-black/70 border border-zinc-700/60 rounded px-2 py-0.5 font-mono text-[10px] text-zinc-300">
-            <span className="text-amber-400 font-bold">{WEAPON_LIST.find((w) => w.type === currentWeapon)?.icon}</span>
-            <span className="font-bold text-white tracking-wider">
-              {t.weaponNames[currentWeapon]?.short || WEAPON_LIST.find((w) => w.type === currentWeapon)?.short}
-            </span>
-            <span className="text-zinc-400">
-              {activeW.reloading ? t.reloading : activeW.unlimited && currentWeapon !== 'handgun' ? t.inf : `${activeW.ammo}`}
-            </span>
-            {currentWeapon === 'm60' && (
-              <span className="flex items-center gap-1">
-                <span className="w-10 h-1.5 bg-zinc-800 rounded overflow-hidden">
-                  <span
-                    className={`block h-full ${(activeW.heat ?? 0) >= 1 ? 'bg-red-500' : (activeW.heat ?? 0) > 0.6 ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                    style={{ width: `${((activeW.heat ?? 0) * 100).toFixed(0)}%` }}
-                  ></span>
+      {/* ---- Bottom HUD: Left Gunbar & Right Combat Station ---- */}
+      <div className="flex items-end justify-between gap-3 w-full">
+        {/* Bottom-Left: Bunker Health & Weapon Command Station / Gunbar */}
+        <div className="pointer-events-auto flex flex-col items-start gap-1.5 select-none">
+          {/* Top row: Bunker Integrity & Active Weapon Status Readout */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Bunker Integrity / Health */}
+            <div className="pointer-events-none flex flex-col gap-1 bg-black/75 backdrop-blur-xs border border-zinc-800/80 rounded-lg px-2.5 py-1 min-w-28 sm:min-w-32 shadow-lg">
+              <div className="flex justify-between items-center text-[8px] sm:text-[9px] font-mono tracking-widest text-zinc-400">
+                <span>{t.bunkerIntegrity}</span>
+                <span className={`font-bold ${isCritical ? 'text-red-400 animate-pulse' : hpPercent < 60 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                  {Math.round(hpPercent)}%
                 </span>
-              </span>
-            )}
-            {(activeW.overheated) && <span className="text-red-400 font-bold animate-pulse">{t.overheat}</span>}
-            {activeW.reloading ? null : (
-              <button onClick={() => onReload(currentWeapon)} className="text-zinc-400 hover:text-white px-1 cursor-pointer" title={t.reloading}>↻</button>
-            )}
-          </div>
-
-          {/* HOLD-TO-OPEN weapon wheel (GTA style) */}
-          <button
-            onPointerDown={(e) => openWheel(e)}
-            onPointerMove={(e) => moveWheel(e)}
-            onPointerUp={(e) => closeWheel(e)}
-            onPointerLeave={() => closeWheel()}
-            onPointerCancel={() => closeWheel()}
-            className="pointer-events-auto relative w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-zinc-900/85 border-2 border-amber-500/80 shadow-xl flex items-center justify-center text-white active:scale-95 transition-transform font-mono font-bold text-[10px] cursor-pointer"
-            title={lang === 'ku' ? 'ڕاگرە بۆ هەڵبژاردنی چەک (١-٥ لە کیبۆرد)' : 'Hold to switch weapon (1-5 on keyboard)'}
-          >
-            <div className="flex flex-col items-center leading-none gap-0.5">
-              <span className="text-2xl">🔫</span>
-              <span>{t.guns}</span>
-            </div>
-            <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-amber-400 animate-pulse"></span>
-          </button>
-          <div className="font-mono text-[8px] text-zinc-500 tracking-widest pointer-events-none">
-            {t.tapFireHoldGuns}
-          </div>
-        </div>
-
-        {/* PUBG-Style Combat Control Cluster in the Bottom-Right Corner */}
-        <div className="pointer-events-auto flex items-end gap-2 sm:gap-3 select-none">
-          {/* Tactical Support Column: Air Attack (Airstrike) & Kamikaze Drone */}
-          <div className="flex flex-col items-center gap-2">
-            {/* Air Attack (Airstrike) Button */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (onAirstrike && airstrikesAvailable > 0) {
-                  onAirstrike();
-                  if (navigator.vibrate) navigator.vibrate(250);
-                }
-              }}
-              disabled={airstrikesAvailable <= 0}
-              className={`relative w-12 h-12 sm:w-14 sm:h-14 rounded-full flex flex-col items-center justify-center transition-all cursor-pointer select-none ${
-                airstrikesAvailable > 0
-                  ? 'bg-linear-to-b from-red-950 via-red-900 to-zinc-950 border-2 border-red-500/90 text-red-200 shadow-[0_0_15px_rgba(239,68,68,0.5)] active:scale-92 active:border-red-400'
-                  : 'bg-zinc-900/80 border border-zinc-800 text-zinc-600 opacity-40 cursor-not-allowed'
-              }`}
-              title={t.airstrikeTitle(airstrikesAvailable)}
-            >
-              <Plane className={`w-4 h-4 sm:w-5 sm:h-5 -rotate-45 ${airstrikesAvailable > 0 ? 'text-red-400 animate-pulse' : 'text-zinc-600'}`} />
-              <span className="font-mono text-[7px] sm:text-[8px] font-black tracking-wider leading-none mt-0.5">
-                {t.airAttack}
-              </span>
-              {/* Badge: remaining strikes */}
-              <span
-                className={`absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full flex items-center justify-center font-mono text-[8px] sm:text-[9px] font-black border ${
-                  airstrikesAvailable > 0
-                    ? 'bg-red-500 text-white border-red-300 shadow-[0_0_8px_rgba(239,68,68,0.8)]'
-                    : 'bg-zinc-800 text-zinc-500 border-zinc-700'
-                }`}
-              >
-                {airstrikesAvailable}
-              </span>
-            </button>
-
-            {/* Drone (Kamikaze) Button */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (onKamikaze && kamikazeReady) {
-                  onKamikaze();
-                  if (navigator.vibrate) navigator.vibrate(200);
-                }
-              }}
-              disabled={!kamikazeReady}
-              className={`relative w-12 h-12 sm:w-14 sm:h-14 rounded-full flex flex-col items-center justify-center transition-all cursor-pointer select-none ${
-                kamikazeReady
-                  ? 'bg-linear-to-b from-orange-950 via-amber-950 to-zinc-950 border-2 border-orange-500/90 text-orange-200 shadow-[0_0_15px_rgba(249,115,22,0.5)] active:scale-92 active:border-orange-300'
-                  : 'bg-zinc-900/80 border border-zinc-800 text-zinc-600 opacity-40 cursor-not-allowed'
-              }`}
-              title={t.kamikazeTitle}
-            >
-              <span className="text-lg sm:text-xl leading-none">🚁</span>
-              <span className="font-mono text-[7px] sm:text-[8px] font-black tracking-wider leading-none mt-0.5">
-                {t.drone}
-              </span>
-              {/* Badge: status */}
-              <span
-                className={`absolute -top-1 -right-1 px-1 rounded-full flex items-center justify-center font-mono text-[7px] sm:text-[8px] font-bold border ${
-                  kamikazeReady
-                    ? 'bg-orange-500 text-black border-amber-300 shadow-[0_0_8px_rgba(249,115,22,0.8)]'
-                    : 'bg-zinc-800 text-zinc-500 border-zinc-700'
-                }`}
-              >
-                {kamikazeReady ? t.ready : t.cooldown}
-              </span>
-            </button>
-          </div>
-
-          {/* Primary Combat Column: Scope (ADS) & Fire */}
-          <div className="flex flex-col items-center gap-2">
-            {/* Scope / Zoom Button (PUBG ADS Position: directly above Fire) */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleZoom();
-                if (navigator.vibrate) navigator.vibrate(30);
-              }}
-              className={`relative w-12 h-12 sm:w-14 sm:h-14 rounded-full flex flex-col items-center justify-center transition-all cursor-pointer select-none ${
-                zoomLevel > 1
-                  ? 'bg-linear-to-b from-amber-950 via-yellow-950 to-zinc-950 border-2 border-amber-400 text-amber-200 shadow-[0_0_18px_rgba(245,158,11,0.65)] ring-2 ring-amber-500/50 active:scale-92'
-                  : 'bg-zinc-900/90 hover:bg-zinc-800/90 border-2 border-zinc-600 text-zinc-200 active:scale-92'
-              }`}
-              title={t.zoomTitle(zoomLevel)}
-            >
-              <Crosshair className={`w-4 h-4 sm:w-5 sm:h-5 ${zoomLevel > 1 ? 'text-amber-400' : 'text-zinc-300'}`} />
-              <span className="font-mono text-[7px] sm:text-[8px] font-black tracking-wider leading-none mt-0.5">
-                {t.scope}
-              </span>
-              {/* Dynamic magnification badge */}
-              <span
-                className={`absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full font-mono text-[8px] sm:text-[9px] font-black border ${
-                  zoomLevel > 1
-                    ? 'bg-amber-400 text-black border-amber-200 shadow-[0_0_8px_rgba(245,158,11,0.8)]'
-                    : 'bg-zinc-800 text-zinc-400 border-zinc-700'
-                }`}
-              >
-                {zoomLevel > 1 ? `${zoomLevel.toFixed(0)}X` : '1X'}
-              </span>
-            </button>
-
-            {/* Primary FIRE Button */}
-            <button
-              type="button"
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                onFireStart();
-              }}
-              onPointerUp={(e) => {
-                e.stopPropagation();
-                onFireEnd();
-              }}
-              onPointerLeave={(e) => {
-                e.stopPropagation();
-                onFireEnd();
-              }}
-              onPointerCancel={(e) => {
-                e.stopPropagation();
-                onFireEnd();
-              }}
-              className="relative w-18 h-18 sm:w-22 sm:h-22 rounded-full bg-linear-to-b from-red-500 via-red-600 to-red-900 border-4 border-amber-400/90 shadow-[0_0_24px_rgba(239,68,68,0.7)] flex flex-col items-center justify-center text-white active:scale-92 active:border-red-400 active:brightness-125 transition-all cursor-pointer select-none"
-              title={t.fire}
-            >
-              <span className="text-2xl sm:text-3xl leading-none -mb-0.5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">🔥</span>
-              <span className="text-[10px] sm:text-xs font-black font-mono tracking-widest text-amber-200 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
-                {t.fire}
-              </span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ---- Weapon wheel overlay ---- */}
-      {wheelOpen && (
-        <div className="absolute inset-0 pointer-events-none z-40">
-          <div className="absolute" style={{ left: wheelCenter().x - 130, top: wheelCenter().y - 130, width: 260, height: 260 }}>
-            {WEAPON_LIST.map((w, i) => {
-              const ang = (i / WEAPON_LIST.length) * Math.PI * 2 - Math.PI / 2; // start top
-              const r = 100;
-              const x = 130 + Math.cos(ang) * r;
-              const y = 130 + Math.sin(ang) * r;
-              const isSel = i === highlight;
-              const isCur = w.type === currentWeapon;
-              return (
+              </div>
+              <div className="h-2 sm:h-2.5 w-full bg-zinc-950 border border-zinc-700/80 rounded-xs overflow-hidden">
                 <div
-                  key={w.type}
-                  className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 flex flex-col items-center justify-center transition-all ${
-                    isSel
-                      ? 'bg-amber-500/90 border-white scale-110'
-                      : isCur
-                      ? 'bg-amber-900/80 border-amber-300'
-                      : 'bg-zinc-900/85 border-zinc-600'
-                  } w-20 h-20 text-center text-white`}
-                  style={{ left: x, top: y }}
-                >
-                  <span className="text-xl leading-none">{w.icon}</span>
-                  <span className="font-mono text-[9px] font-bold">{t.weaponNames[w.type]?.short || w.short}</span>
-                  <span className="font-mono text-[8px] opacity-80">
-                    {weapons[w.type].unlimited && w.type !== 'handgun' ? t.inf : weapons[w.type].ammo}
-                  </span>
+                  className={`h-full transition-all duration-200 ${
+                    isCritical ? 'bg-red-600 animate-pulse' : hpPercent < 60 ? 'bg-amber-500' : 'bg-emerald-500'
+                  }`}
+                  style={{ width: `${hpPercent}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Active Weapon Readout Card */}
+            <div className="flex items-center gap-1.5 bg-black/80 backdrop-blur-xs border border-zinc-700/80 rounded-lg px-2 py-1 font-mono text-[9px] sm:text-[10px] text-zinc-300 shadow-md">
+              <span className="text-amber-400 font-black">{WEAPON_LIST.find((w) => w.type === currentWeapon)?.icon}</span>
+              <span className="font-bold text-white tracking-wider">
+                {t.weaponNames[currentWeapon]?.short || WEAPON_LIST.find((w) => w.type === currentWeapon)?.short}
+              </span>
+              <span className={`font-mono ${activeW.reloading ? 'text-amber-400 animate-pulse' : 'text-zinc-400'}`}>
+                {activeW.reloading ? t.reloading : activeW.unlimited && currentWeapon !== 'handgun' ? t.inf : `${activeW.ammo}`}
+              </span>
+              {currentWeapon === 'm60' && (
+                <div className="w-7 sm:w-9 h-1.5 bg-zinc-800 rounded-full overflow-hidden border border-zinc-700">
+                  <div
+                    className={`h-full transition-all ${(activeW.heat ?? 0) >= 1 ? 'bg-red-500' : (activeW.heat ?? 0) > 0.6 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                    style={{ width: `${((activeW.heat ?? 0) * 100).toFixed(0)}%` }}
+                  />
                 </div>
-              );
-            })}
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-zinc-900 border-2 border-amber-400 flex items-center justify-center font-mono text-[8px] text-amber-300 text-center leading-tight whitespace-pre-line">
-              {t.wheelHoldRelease}
+              )}
+              {activeW.overheated && <span className="text-red-400 text-[8px] font-bold animate-pulse">{t.overheat}</span>}
+              {!activeW.reloading && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onReload(currentWeapon);
+                  }}
+                  className="text-zinc-400 hover:text-white px-0.5 text-xs cursor-pointer active:scale-90"
+                  title={t.reloading}
+                >
+                  ↻
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Bottom row: The Gunbar with Main GUNS Switcher Button + 1-Tap Quick Slots */}
+          <div className="flex items-center gap-1.5">
+            {/* Main GUN CHANGER Button (Tap: Next · Hold: Tactical Armory) */}
+            <button
+              type="button"
+              onPointerDown={handleGunPointerDown}
+              onPointerMove={handleGunPointerMove}
+              onPointerUp={handleGunPointerUp}
+              onPointerCancel={handleGunPointerCancel}
+              className="relative w-12 h-12 sm:w-13 sm:h-13 rounded-xl bg-linear-to-b from-zinc-800 via-zinc-900 to-black border-2 border-amber-500/90 shadow-[0_0_16px_rgba(245,158,11,0.4)] flex flex-col items-center justify-center text-white active:scale-92 active:border-amber-300 transition-transform cursor-pointer select-none"
+              title={lang === 'ku' ? 'دابگرە بۆ چەکی دواتر • ڕابگرە بۆ کۆگا' : 'Tap for next weapon · Hold for Armory'}
+            >
+              <span className="text-base sm:text-lg leading-none">🔫</span>
+              <span className="font-mono text-[7px] sm:text-[8px] font-black tracking-wider text-amber-300 leading-none mt-0.5">
+                {t.guns}
+              </span>
+              <span className="font-mono text-[6px] text-zinc-400 leading-none mt-0.5 tracking-tighter">
+                TAP/HOLD
+              </span>
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping" />
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400" />
+            </button>
+
+            {/* Quick Weapon Slots: 1-Tap Direct Weapon Selection */}
+            <div className="flex items-center gap-1 bg-black/85 backdrop-blur-xs border border-zinc-700/80 rounded-xl px-1.5 py-1.5 shadow-lg">
+              {WEAPON_LIST.map((w) => {
+                const isCur = w.type === currentWeapon;
+                return (
+                  <button
+                    key={w.type}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSwitchWeapon(w.type);
+                      if (navigator.vibrate) navigator.vibrate(25);
+                    }}
+                    className={`flex items-center gap-1 px-1.5 sm:px-2 py-1 sm:py-1.5 rounded-lg transition-all cursor-pointer select-none ${
+                      isCur
+                        ? 'bg-linear-to-b from-amber-500 to-amber-600 text-black border border-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.65)] font-black scale-105'
+                        : 'bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 border border-zinc-700/80 active:scale-95'
+                    }`}
+                    title={`${t.weaponNames[w.type]?.label || w.short} (${w.key})`}
+                  >
+                    <span className="text-xs sm:text-sm leading-none">{w.icon}</span>
+                    <span className="font-mono text-[8px] sm:text-[9px] font-bold">
+                      {t.weaponNames[w.type]?.short || w.short}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom-Right: Tactical Air Support & Primary Combat */}
+        <div className="pointer-events-auto flex items-end gap-2 sm:gap-3 select-none">
+          {/* Tactical Air Support Column: Air Attack (Airstrike) & Kamikaze Drone */}
+            <div className="flex flex-col items-center gap-2">
+              {/* Air Attack (Airstrike) Button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onAirstrike && airstrikesAvailable > 0) {
+                    onAirstrike();
+                    if (navigator.vibrate) navigator.vibrate(250);
+                  }
+                }}
+                disabled={airstrikesAvailable <= 0}
+                className={`relative w-12 h-12 sm:w-14 sm:h-14 rounded-full flex flex-col items-center justify-center transition-all cursor-pointer select-none ${
+                  airstrikesAvailable > 0
+                    ? 'bg-linear-to-b from-red-950 via-red-900 to-zinc-950 border-2 border-red-500/90 text-red-200 shadow-[0_0_15px_rgba(239,68,68,0.5)] active:scale-92 active:border-red-400'
+                    : 'bg-zinc-900/80 border border-zinc-800 text-zinc-600 opacity-40 cursor-not-allowed'
+                }`}
+                title={t.airstrikeTitle(airstrikesAvailable)}
+              >
+                <Plane className={`w-4 h-4 sm:w-5 sm:h-5 -rotate-45 ${airstrikesAvailable > 0 ? 'text-red-400 animate-pulse' : 'text-zinc-600'}`} />
+                <span className="font-mono text-[7px] sm:text-[8px] font-black tracking-wider leading-none mt-0.5">
+                  {t.airAttack}
+                </span>
+                {/* Badge: remaining strikes */}
+                <span
+                  className={`absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full flex items-center justify-center font-mono text-[8px] sm:text-[9px] font-black border ${
+                    airstrikesAvailable > 0
+                      ? 'bg-red-500 text-white border-red-300 shadow-[0_0_8px_rgba(239,68,68,0.8)]'
+                      : 'bg-zinc-800 text-zinc-500 border-zinc-700'
+                  }`}
+                >
+                  {airstrikesAvailable}
+                </span>
+              </button>
+
+              {/* Drone (Kamikaze) Button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onKamikaze && kamikazeReady) {
+                    onKamikaze();
+                    if (navigator.vibrate) navigator.vibrate(200);
+                  }
+                }}
+                disabled={!kamikazeReady}
+                className={`relative w-12 h-12 sm:w-14 sm:h-14 rounded-full flex flex-col items-center justify-center transition-all cursor-pointer select-none ${
+                  kamikazeReady
+                    ? 'bg-linear-to-b from-orange-950 via-amber-950 to-zinc-950 border-2 border-orange-500/90 text-orange-200 shadow-[0_0_15px_rgba(249,115,22,0.5)] active:scale-92 active:border-orange-300'
+                    : 'bg-zinc-900/80 border border-zinc-800 text-zinc-600 opacity-40 cursor-not-allowed'
+                }`}
+                title={t.kamikazeTitle}
+              >
+                <span className="text-lg sm:text-xl leading-none">🚁</span>
+                <span className="font-mono text-[7px] sm:text-[8px] font-black tracking-wider leading-none mt-0.5">
+                  {t.drone}
+                </span>
+                {/* Badge: status */}
+                <span
+                  className={`absolute -top-1 -right-1 px-1 rounded-full flex items-center justify-center font-mono text-[7px] sm:text-[8px] font-bold border ${
+                    kamikazeReady
+                      ? 'bg-orange-500 text-black border-amber-300 shadow-[0_0_8px_rgba(249,115,22,0.8)]'
+                      : 'bg-zinc-800 text-zinc-500 border-zinc-700'
+                  }`}
+                >
+                  {kamikazeReady ? t.ready : t.cooldown}
+                </span>
+              </button>
+            </div>
+
+            {/* Column 3: Primary Combat (Scope & Fire) */}
+            <div className="flex flex-col items-center gap-2">
+              {/* Scope / Zoom Button (PUBG ADS Position: directly above Fire) */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleZoom();
+                  if (navigator.vibrate) navigator.vibrate(30);
+                }}
+                className={`relative w-12 h-12 sm:w-14 sm:h-14 rounded-full flex flex-col items-center justify-center transition-all cursor-pointer select-none ${
+                  zoomLevel > 1
+                    ? 'bg-linear-to-b from-amber-950 via-yellow-950 to-zinc-950 border-2 border-amber-400 text-amber-200 shadow-[0_0_18px_rgba(245,158,11,0.65)] ring-2 ring-amber-500/50 active:scale-92'
+                    : 'bg-zinc-900/90 hover:bg-zinc-800/90 border-2 border-zinc-600 text-zinc-200 active:scale-92'
+                }`}
+                title={t.zoomTitle(zoomLevel)}
+              >
+                <Crosshair className={`w-4 h-4 sm:w-5 sm:h-5 ${zoomLevel > 1 ? 'text-amber-400' : 'text-zinc-300'}`} />
+                <span className="font-mono text-[7px] sm:text-[8px] font-black tracking-wider leading-none mt-0.5">
+                  {t.scope}
+                </span>
+                {/* Dynamic magnification badge */}
+                <span
+                  className={`absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full font-mono text-[8px] sm:text-[9px] font-black border ${
+                    zoomLevel > 1
+                      ? 'bg-amber-400 text-black border-amber-200 shadow-[0_0_8px_rgba(245,158,11,0.8)]'
+                      : 'bg-zinc-800 text-zinc-400 border-zinc-700'
+                  }`}
+                >
+                  {zoomLevel > 1 ? `${zoomLevel.toFixed(0)}X` : '1X'}
+                </span>
+              </button>
+
+              {/* Primary FIRE Button */}
+              <button
+                type="button"
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  onFireStart();
+                }}
+                onPointerUp={(e) => {
+                  e.stopPropagation();
+                  onFireEnd();
+                }}
+                onPointerLeave={(e) => {
+                  e.stopPropagation();
+                  onFireEnd();
+                }}
+                onPointerCancel={(e) => {
+                  e.stopPropagation();
+                  onFireEnd();
+                }}
+                className="relative w-18 h-18 sm:w-22 sm:h-22 rounded-full bg-linear-to-b from-red-500 via-red-600 to-red-900 border-4 border-amber-400/90 shadow-[0_0_24px_rgba(239,68,68,0.7)] flex flex-col items-center justify-center text-white active:scale-92 active:border-red-400 active:brightness-125 transition-all cursor-pointer select-none"
+                title={t.fire}
+              >
+                <span className="text-2xl sm:text-3xl leading-none -mb-0.5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">🔥</span>
+                <span className="text-[10px] sm:text-xs font-black font-mono tracking-widest text-amber-200 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
+                  {t.fire}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+      {/* ---- Tactical Armory Overlay (Hold/Open Weapon Selector) ---- */}
+      {armoryOpen && (
+        <div
+          className="fixed inset-0 z-50 pointer-events-auto bg-black/75 backdrop-blur-xs flex items-end sm:items-center justify-start p-4 sm:p-8"
+          onClick={() => {
+            setArmoryOpen(false);
+            isHoldingRef.current = false;
+            setDragHoveredIndex(-1);
+          }}
+          onPointerMove={(e) => {
+            const elements = document.elementsFromPoint(e.clientX, e.clientY);
+            let foundIdx = -1;
+            for (const el of elements) {
+              const idxAttr = el.getAttribute('data-weapon-index');
+              if (idxAttr !== null) {
+                foundIdx = parseInt(idxAttr, 10);
+                break;
+              }
+            }
+            if (foundIdx !== dragHoveredIndex) {
+              setDragHoveredIndex(foundIdx);
+              if (foundIdx >= 0 && navigator.vibrate) navigator.vibrate(15);
+            }
+          }}
+          onPointerUp={() => {
+            if (dragHoveredIndex >= 0 && dragHoveredIndex < WEAPON_LIST.length) {
+              const targetWeapon = WEAPON_LIST[dragHoveredIndex].type;
+              onSwitchWeapon(targetWeapon);
+              if (navigator.vibrate) navigator.vibrate(40);
+              setArmoryOpen(false);
+              isHoldingRef.current = false;
+              setDragHoveredIndex(-1);
+            }
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm sm:max-w-md bg-zinc-950/95 border-2 border-amber-500/80 rounded-2xl p-4 shadow-[0_0_40px_rgba(245,158,11,0.3)] flex flex-col gap-3 max-h-[85vh] overflow-y-auto"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xl text-amber-400">🛡️</span>
+                <div>
+                  <h3 className="font-mono text-sm sm:text-base font-black text-amber-300 tracking-wider">
+                    {t.armoryTitle}
+                  </h3>
+                  <p className="font-mono text-[9px] text-zinc-400">
+                    {lang === 'ku' ? 'کلیک یان بەرپێدان بۆ هەڵبژاردن' : 'TAP OR DRAG-RELEASE TO EQUIP'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setArmoryOpen(false);
+                  isHoldingRef.current = false;
+                  setDragHoveredIndex(-1);
+                }}
+                className="w-7 h-7 rounded-full bg-zinc-900 border border-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center cursor-pointer active:scale-95"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Weapon Cards */}
+            <div className="flex flex-col gap-2">
+              {WEAPON_LIST.map((w, i) => {
+                const isCur = w.type === currentWeapon;
+                const isDragHover = dragHoveredIndex === i;
+                const wState = weapons[w.type];
+                return (
+                  <button
+                    key={w.type}
+                    type="button"
+                    data-weapon-index={i}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSwitchWeapon(w.type);
+                      if (navigator.vibrate) navigator.vibrate(35);
+                      setArmoryOpen(false);
+                      isHoldingRef.current = false;
+                      setDragHoveredIndex(-1);
+                    }}
+                    className={`relative w-full flex items-center justify-between p-2.5 sm:p-3 rounded-xl border-2 transition-all cursor-pointer select-none text-left ${
+                      isDragHover
+                        ? 'bg-amber-500/25 border-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.5)] scale-[1.02]'
+                        : isCur
+                        ? 'bg-amber-950/40 border-amber-500/90 shadow-[0_0_10px_rgba(245,158,11,0.3)]'
+                        : 'bg-zinc-900/80 hover:bg-zinc-850 border-zinc-700/80'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-2xl border ${
+                        isCur ? 'bg-amber-500/30 border-amber-400' : 'bg-black/60 border-zinc-700'
+                      }`}>
+                        {w.icon}
+                      </div>
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono text-xs sm:text-sm font-black text-white tracking-wide">
+                            {t.weaponNames[w.type]?.label || w.short}
+                          </span>
+                          <span className="font-mono text-[9px] px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-400 font-bold border border-zinc-700">
+                            [{w.key}]
+                          </span>
+                        </div>
+                        <span className="font-mono text-[9px] sm:text-[10px] text-zinc-400 mt-0.5">
+                          {t.weaponRoles[w.type]}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col items-end gap-1">
+                      <div className="font-mono text-xs font-bold text-amber-300">
+                        {wState.reloading
+                          ? t.reloading
+                          : wState.unlimited && w.type !== 'handgun'
+                          ? t.inf
+                          : `${wState.ammo} / ${wState.maxAmmo}`}
+                      </div>
+                      {isCur ? (
+                        <span className="font-mono text-[8px] font-black px-2 py-0.5 rounded bg-amber-500 text-black border border-amber-300 tracking-wider">
+                          {t.equipped}
+                        </span>
+                      ) : isDragHover ? (
+                        <span className="font-mono text-[8px] font-black px-2 py-0.5 rounded bg-white text-black tracking-wider animate-pulse">
+                          RELEASE
+                        </span>
+                      ) : (
+                        <span className="font-mono text-[8px] text-zinc-500 tracking-wider">
+                          TAP TO EQUIP
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
