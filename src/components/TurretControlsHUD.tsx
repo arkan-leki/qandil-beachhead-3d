@@ -233,42 +233,53 @@ export const TurretControlsHUD: React.FC<TurretControlsHUDProps> = ({
         </div>
       )}
 
-      {/* ---- Top row: score (left) · 360 radar/compass (centre) · buttons (right) ---- */}
+      {/* ---- Top row: Radar (left top corner) + Scores (next right to it) · Buttons (right) ---- */}
       <div className="flex items-start justify-between w-full gap-2">
-        {/* Top-LEFT: score + wave detail cluster */}
-        <div className="flex flex-col gap-1.5 items-start">
-          <div className="flex items-stretch gap-1.5 pointer-events-auto">
-            {/* Score */}
-            <div className="bg-black/60 backdrop-blur-[2px] border border-zinc-700/50 rounded px-2.5 py-1 text-right">
-              <div className="text-[8px] font-mono text-zinc-500 tracking-[0.2em]">{t.score}</div>
-              <div className="font-mono text-lg sm:text-xl font-bold text-amber-400 leading-none">{stats.score.toLocaleString()}</div>
-            </div>
-            {/* Wave */}
-            <div className="bg-black/60 backdrop-blur-[2px] border border-zinc-700/50 rounded px-2 py-1 text-center">
-              <div className="text-[8px] font-mono text-zinc-500 tracking-[0.2em]">{t.wave}</div>
-              <div className="font-mono text-lg sm:text-xl font-bold text-emerald-400 leading-none">{stats.wave}</div>
-            </div>
-            {/* Echelon */}
-            <div className="bg-black/60 backdrop-blur-[2px] border border-zinc-700/50 rounded px-2 py-1 text-center">
-              <div className="text-[8px] font-mono text-zinc-500 tracking-[0.2em]">{t.ech}</div>
-              <div className="font-mono text-lg sm:text-xl font-bold text-cyan-400 leading-none">{stats.currentEchelon ?? 1}</div>
+        {/* Top-LEFT: Mini Radar + Scores immediately next right to it */}
+        <div className="flex items-start gap-2 pointer-events-auto">
+          {/* Smaller Radar at top-left corner */}
+          <div className="w-[100px] h-[122px] sm:w-[110px] sm:h-[134px] shrink-0 pointer-events-none select-none relative">
+            <div className="scale-[0.65] sm:scale-[0.72] origin-top-left">
+              <RadarHUD blips={radarBlips} headingDeg={headingDeg} pitchDeg={pitchDeg} lang={lang} />
             </div>
           </div>
 
-          {isCritical && (
-            <div className="bg-red-950/80 border border-red-600 rounded px-2 py-1 font-mono text-[10px] text-red-300 font-bold tracking-widest animate-pulse pointer-events-none">
-              ⚠ {Math.round(hpPercent)}%
+          {/* Scores next right to the radar */}
+          <div className="flex flex-col gap-1.5 items-start pt-0.5">
+            <div className="flex items-stretch gap-1 sm:gap-1.5 flex-wrap">
+              {/* Score */}
+              <div className="bg-black/75 backdrop-blur-xs border border-zinc-700/70 rounded-md px-2 sm:px-2.5 py-1 text-right shadow-md">
+                <div className="text-[7.5px] sm:text-[8px] font-mono text-zinc-400 tracking-[0.2em]">{t.score}</div>
+                <div className="font-mono text-sm sm:text-base md:text-lg font-bold text-amber-400 leading-none">
+                  {stats.score.toLocaleString()}
+                </div>
+              </div>
+              {/* Wave */}
+              <div className="bg-black/75 backdrop-blur-xs border border-zinc-700/70 rounded-md px-1.5 sm:px-2 py-1 text-center shadow-md">
+                <div className="text-[7.5px] sm:text-[8px] font-mono text-zinc-400 tracking-[0.2em]">{t.wave}</div>
+                <div className="font-mono text-sm sm:text-base md:text-lg font-bold text-emerald-400 leading-none">
+                  {stats.wave}
+                </div>
+              </div>
+              {/* Echelon */}
+              <div className="bg-black/75 backdrop-blur-xs border border-zinc-700/70 rounded-md px-1.5 sm:px-2 py-1 text-center shadow-md">
+                <div className="text-[7.5px] sm:text-[8px] font-mono text-zinc-400 tracking-[0.2em]">{t.ech}</div>
+                <div className="font-mono text-sm sm:text-base md:text-lg font-bold text-cyan-400 leading-none">
+                  {stats.currentEchelon ?? 1}
+                </div>
+              </div>
             </div>
-          )}
 
-          {/* 360° compass + enemy radar (bottom-left corner) */}
-          <div className="scale-75 sm:scale-90 origin-top-left">
-            <RadarHUD blips={radarBlips} headingDeg={headingDeg} pitchDeg={pitchDeg} lang={lang} />
+            {isCritical && (
+              <div className="bg-red-950/90 border border-red-600 rounded px-2 py-0.5 font-mono text-[9px] text-red-300 font-bold tracking-widest animate-pulse pointer-events-none shadow-md">
+                ⚠ {Math.round(hpPercent)}%
+              </div>
+            )}
           </div>
         </div>
 
         {/* Top-right: utility action buttons */}
-        <div className="flex flex-col items-end gap-2 pointer-events-auto">
+        <div className="flex flex-col items-end gap-2 pointer-events-auto shrink-0">
           <div className="flex gap-1.5">
             <button
               onClick={onFlare}
